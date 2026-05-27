@@ -87,7 +87,7 @@ header {
   padding: 0 20px; height: 48px; border-bottom: 1px solid var(--border);
   background: var(--bg2); flex-shrink: 0; user-select: none;
 }
-.logo { font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--text); }
+.logo { font-size: 13px; font-weight: 800; letter-spacing: 0.67em; text-transform: uppercase; color: var(--text); }
 .logo span { color: var(--pink); }
 
 .conn-pill {
@@ -110,8 +110,8 @@ header {
 }
 .state-badge.DISARMED   { color: var(--green);  border-color: var(--green);  background: rgba(74,222,128,.08); }
 .state-badge.ARMED      { color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,.08); }
-.state-badge.ENTRY_DELAY{ color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,.12); animation: pulse-amber 1s infinite; }
-.state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,.12); animation: pulse-red .6s infinite; }
+.state-badge.ENTRY_DELAY{ color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,0.67); animation: pulse-amber 1s infinite; }
+.state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,0.67); animation: pulse-red .6s infinite; }
 @keyframes pulse-amber { 0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.3)} 50%{box-shadow:0 0 0 6px rgba(251,191,36,0)} }
 @keyframes pulse-red   { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)} 50%{box-shadow:0 0 0 8px rgba(248,113,113,0)} }
 
@@ -150,6 +150,12 @@ header {
 .fp-wrap img.base {
   display: block; width: 100%; height: 100%;
   object-fit: contain;
+}
+[data-theme="dark"] .fp-wrap img.base {
+  filter: invert(1);
+}
+[data-theme="dark"] .fp-wrap .beam-layer:not(.armed):not(.triggered) {
+  filter: grayscale(100%) brightness(0.55) invert(1);
 }
 .fp-wrap .beam-layer {
   position: absolute; inset: 0; width: 100%; height: 100%;
@@ -192,8 +198,8 @@ header {
 .fp-alarming-label {
   position: absolute; top: 10px; left: 10px; z-index: 31;
   font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: .12em; text-transform: uppercase;
-  color: var(--red); background: rgba(184,50,50,.12);
+  letter-spacing: 0.67em; text-transform: uppercase;
+  color: var(--red); background: rgba(184,50,50,0.67);
   border: 1px solid var(--red); border-radius: 4px;
   padding: 3px 10px;
   animation: label-pulse .55s infinite;
@@ -205,33 +211,37 @@ header {
 /* ─── Warning speech bubbles (stale sensor / laser defective) ───── */
 .sensor-warn {
   position: absolute;
-  bottom: calc(100% + 7px);
-  left: calc(50% + 2px);
-  min-width: 126px; max-width: 190px;
-  padding: 5px 8px;
+  bottom: calc(100% + 8px);
+  right: -8px;
+  min-width: 100px; max-width: 170px;
+  padding: 5px 9px;
   border-radius: 6px;
-  font-family: var(--mono); font-size: 8.5px; line-height: 1.45;
-  pointer-events: none; white-space: normal;
+  font-family: var(--mono); font-size: 9px; line-height: 1.5;
+  white-space: nowrap; pointer-events: none;
   z-index: 20;
   display: none;
   box-shadow: 0 2px 10px rgba(0,0,0,.22);
 }
-/* tail: pointing down-left toward the sensor bubble */
+/* tail: pointing down-right toward the sensor bubble */
 .sensor-warn::after {
   content: ''; position: absolute;
-  bottom: -5px; left: 9px;
-  width: 8px; height: 8px;
+  bottom: -7px; right: 12px;
+  width: 11px; height: 11px;
   transform: rotate(45deg);
 }
 .sensor-warn.stale {
   display: block;
-  background: rgba(160,83,10,.10);
+  background: rgba(160,83,10,0.67);
   border: 1px solid var(--amber);
-  color: var(--amber);
+  color: var(--text);
+  cursor: pointer;
+  pointer-events: auto;
 }
-[data-theme="dark"] .sensor-warn.stale { background: rgba(251,191,36,.10); }
+.sensor-warn.stale:hover { background: rgba(160,83,10,.22); }
+[data-theme="dark"] .sensor-warn.stale { background: rgba(251,191,36,.67); color: var(--bg); }
+[data-theme="dark"] .sensor-warn.stale:hover { background: rgba(251,191,36,.18); }
 .sensor-warn.stale::after {
-  background: rgba(160,83,10,.10);
+  background: rgba(160,83,10,0.67);
   border-right: 1px solid var(--amber);
   border-bottom: 1px solid var(--amber);
 }
@@ -248,19 +258,24 @@ header {
   border-bottom: 1px solid var(--red);
 }
 
-/* ─── Arm / Disarm pending state ─────────────────────────────────── */
-.btn-arm.pending {
-  animation: arm-pulse .65s infinite;
+/* ─── Arm / Disarm pending state — orange while waiting ──────────── */
+.btn-arm.pending, .btn-disarm.pending {
+  background: rgba(251,146,60,0.67) !important;
+  color: #F97316 !important;
+  border-color: rgba(251,146,60,.45) !important;
+  animation: pending-pulse .65s infinite;
   cursor: wait;
-  opacity: .75;
 }
-.btn-disarm.pending {
-  animation: disarm-pulse .65s infinite;
-  cursor: wait;
-  opacity: .75;
+@keyframes pending-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(251,146,60,.45); }
+  50%     { box-shadow: 0 0 0 6px rgba(251,146,60,0); }
 }
-@keyframes arm-pulse    { 0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.4)} 50%{box-shadow:0 0 0 6px rgba(251,191,36,0)} }
-@keyframes disarm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)} 50%{box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+/* Sensor dot pending — orange blink */
+.s-dot.pending {
+  background: #F97316 !important;
+  box-shadow: none !important;
+  animation: blink .4s infinite !important;
+}
 
 /* ─── Dev test toolbar ───────────────────────────────────────────── */
 /* REMOVE THIS ENTIRE BLOCK when no longer needed */
@@ -289,10 +304,11 @@ header {
 .dev-btn.red.active { background: rgba(184,50,50,.15); border-color: var(--red); }
 .dev-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
 
-/* Sensor bubbles */
+/* Raise stale bubble above alarming overlays (z-index 30/31) */
+.sensor-bubble:has(.sensor-warn.stale) { z-index: 50; }
 .sensor-bubble {
   position: absolute; transform: translate(-50%, -50%);
-  width: 22px; height: 22px; border-radius: 50%;
+  width: var(--bubble-sz, 28px); height: var(--bubble-sz, 28px); border-radius: 50%;
   background: var(--pink-dim); border: 2px solid var(--pink);
   cursor: pointer; transition: all .25s;
   display: flex; align-items: center; justify-content: center;
@@ -339,7 +355,7 @@ header {
 }
 .ctrl-section { padding: 16px; border-bottom: 1px solid var(--border); }
 .ctrl-section h3 {
-  font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.67em; text-transform: uppercase;
   color: var(--text-muted); margin-bottom: 12px;
 }
 
@@ -351,7 +367,7 @@ header {
   transition: all .2s;
 }
 .btn-arm {
-  background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.35);
+  background: rgba(251,191,36,0.67); color: var(--amber); border: 1px solid rgba(251,191,36,.35);
 }
 .btn-arm:hover { background: rgba(251,191,36,.22); }
 .btn-disarm {
@@ -548,15 +564,27 @@ header {
 .modal-row button { flex: 1; padding: 8px; border-radius: var(--radius); font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); transition: all .15s; }
 .modal-row button:hover { border-color: var(--pink); color: var(--pink); }
 .modal-row button.danger { border-color: var(--red); color: var(--red); }
-.modal-row button.danger:hover { background: rgba(248,113,113,.12); }
+.modal-row button.danger:hover { background: rgba(248,113,113,0.67); }
 /* ─── Responsive — mobile: sidebar moves to bottom ───────────────── */
 @media (max-width: 768px) {
   html, body { height: auto; overflow: auto; }
   #app { height: auto; min-height: 100dvh; overflow: visible; }
 
+  /* Fix: connection pill / server URL overflow on narrow screens */
+  .conn-pill {
+    max-width: 130px; overflow: hidden;
+  }
+  #conn-label {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
   header { padding: 0 12px; gap: 10px; }
   .logo { font-size: 12px; }
-  .state-badge { font-size: 9px; padding: 2px 8px; }
+  .state-badge { font-size: 9px; padding: 2px 8px; flex-shrink: 0; }
+
+  /* Setup card: prevent overflow on narrow screens */
+  .setup-card { padding: 24px 20px; }
+  input, textarea, select { font-size: 16px; } /* prevent iOS zoom */
 
   .tab-bar { overflow-x: auto; flex-wrap: nowrap; padding: 6px 12px 0; gap: 1px; }
   .tab { padding: 5px 11px 7px; font-size: 10px; white-space: nowrap; }
@@ -571,9 +599,9 @@ header {
   .floorplan-col {
     flex: none !important;
     width: 100% !important;
-    height: 52vw !important;
-    min-height: 180px !important;
-    max-height: 46vh !important;
+    height: 62vw !important;
+    min-height: 220px !important;
+    max-height: 52vh !important;
     border-bottom: 1px solid var(--border);
   }
   .ctrl-col {
@@ -620,8 +648,46 @@ header {
   }
 
   /* Warn bubbles: ensure they don't overflow off-screen */
-  .sensor-warn { max-width: 150px; font-size: 8px; }
+  .sensor-warn { max-width: 130px; font-size: 8px; padding: 4px 7px; }
 }
+
+/* ─── Stale sensor detail modal ──────────────────────────────────── */
+#stale-detail-modal {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(10,10,12,.75); display: none;
+  align-items: center; justify-content: center;
+  padding: 16px;
+}
+#stale-detail-modal.open { display: flex; }
+.stale-detail-card {
+  background: var(--bg2); border: 1px solid var(--amber);
+  border-radius: 10px; padding: 22px 24px; max-width: 360px; width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
+}
+.stale-detail-card h3 {
+  font-size: 14px; font-weight: 700; color: var(--amber);
+  margin-bottom: 4px;
+}
+.stale-detail-card .sdm-meta {
+  font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+  margin-bottom: 14px;
+}
+.stale-detail-card .sdm-body {
+  font-family: var(--mono); font-size: 11px; color: var(--text);
+  line-height: 1.7; margin-bottom: 16px;
+}
+.stale-detail-card .sdm-tip {
+  font-family: var(--mono); font-size: 10px; color: var(--amber);
+  background: rgba(160,83,10,.10); border: 1px solid rgba(160,83,10,.3);
+  border-radius: 5px; padding: 8px 10px; margin-bottom: 16px; line-height: 1.6;
+}
+[data-theme="dark"] .stale-detail-card .sdm-tip { background: rgba(251,191,36,.08); }
+.stale-detail-card button {
+  font-family: var(--mono); font-size: 11px; padding: 7px 16px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); transition: all .15s;
+}
+.stale-detail-card button:hover { border-color: var(--pink); color: var(--pink); }
 </style>
 </head>
 <body>
@@ -639,7 +705,16 @@ header {
 const INACTIVE_BEAM_ALPHA = 0.35;
 
 // ─────────────────────────────────────────────────────────────────────
-//  SENSOR_CONFIG
+//  BUBBLE SIZE SCALE
+//  Multiplier applied on top of the proportional scaling.
+//  1.0 = default (28px at full native resolution, scales down with floorplan)
+//  1.5 = 50% larger, 0.7 = 30% smaller, etc.
+// ─────────────────────────────────────────────────────────────────────
+const BUBBLE_SIZE_SCALE = 0.7;
+//  Sensors not seen within this many seconds get a warning badge.
+//  Default: 3 days (259200 s). Change to taste.
+// ─────────────────────────────────────────────────────────────────────
+const STALE_SENSOR_THRESHOLD_S = 259200;  // 3 days
 //  id:      matches config.sensors key on the Pico
 //  name:    display name
 //  beam:    ./beams/beamN.png filename (shown when armed)
@@ -723,6 +798,17 @@ const SENSOR_CONFIG = [
   </div>
 </div>
 
+<!-- Stale sensor detail modal -->
+<div id="stale-detail-modal">
+  <div class="stale-detail-card">
+    <h3 id="sdm-title">⚠ Sensor not recently seen</h3>
+    <div class="sdm-meta" id="sdm-meta"></div>
+    <div class="sdm-body" id="sdm-body"></div>
+    <div class="sdm-tip" id="sdm-tip"></div>
+    <button onclick="closeStaleDetail()">Close</button>
+  </div>
+</div>
+
 <!-- Main app shell -->
 <div id="app">
   <header>
@@ -772,6 +858,7 @@ const SENSOR_CONFIG = [
         <h3>System Status</h3>
         <div class="stat-row"><span class="stat-label">State</span>      <span class="stat-val" id="s-state">—</span></div>
         <div class="stat-row"><span class="stat-label">Source</span>     <span class="stat-val" id="s-source">—</span></div>
+        <div class="stat-row"><span class="stat-label">Power</span>      <span class="stat-val" id="s-power">—</span></div>
         <div class="stat-row"><span class="stat-label">MQTT</span>       <span class="stat-val" id="s-mqtt">—</span></div>
         <div class="stat-row"><span class="stat-label">Uptime</span>     <span class="stat-val" id="s-uptime">—</span></div>
         <div class="stat-row"><span class="stat-label">RAM free</span>   <span class="stat-val" id="s-ram">—</span></div>
@@ -850,6 +937,10 @@ let deviceConfig = null;   // last full config received from device
 let logEntries   = [];
 let configSection = "full";
 let disableTarget = null;
+let armPending   = false;  // waiting for MQTT to confirm ARM
+let disarmPending = false; // waiting for MQTT to confirm DISARM
+let armPendingTimer = null;
+let disarmPendingTimer = null;
 
 // Credential persistence (cookies, 1-year expiry)
 function saveCreds(c) {
@@ -1074,7 +1165,15 @@ function handleMessage(topic, raw) {
   // Armed state  (retained, QOS 1)
   if (topic === `status/${did}/armed` || topic.endsWith('/armed')) {
     const state = (data.state || data.armed_state || (data.armed ? 'ARMED' : 'DISARMED') || '').toUpperCase();
-    if (state) setAlarmState(state);
+    if (state) {
+      setAlarmState(state);
+      // Resolve arm/disarm pending
+      if (state !== 'DISARMED') setArmPending(false);
+      else setDisarmPending(false);
+      // Also clear the opposite pending on any confirmed state
+      setArmPending(false);
+      setDisarmPending(false);
+    }
     if (data.source) setStatVal('s-source', data.source);
     updateStateBadge(state);
     updateBeams();
@@ -1114,6 +1213,15 @@ function handleMessage(topic, raw) {
     if (data.ram_free) setStatVal('s-ram', `${Math.round(data.ram_free/1024)} KB`, 'green');
     setStatVal('s-lastseen', new Date().toLocaleTimeString(), 'green');
     setConnStatus('ok', credentials?.broker || '');
+    // Power status from heartbeat if provided
+    if (data.power !== undefined) updatePowerStatus(data.power);
+    return;
+  }
+
+  // Dedicated power status topic: status/{did}/power
+  // Expected: { on_mains: true/false } or { power: "mains"/"backup" }
+  if (topic.endsWith('/power')) {
+    updatePowerStatus(data);
     return;
   }
 
@@ -1142,12 +1250,41 @@ function makePayload(extra = {}) {
 function sendArm() {
   const did = credentials?.device_id || 'diewesemoer';
   publish(`cmd/${did}/arm`, makePayload({ source: 'web' }), 1);
+  setArmPending(true);
 }
 
 function sendDisarm() {
   const did  = credentials?.device_id || 'diewesemoer';
   const pin  = document.getElementById('pin-input').value.trim();
   publish(`cmd/${did}/disarm`, makePayload({ source: 'web', code: pin || undefined }), 1);
+  setDisarmPending(true);
+}
+
+function setArmPending(on) {
+  armPending = on;
+  const btn = document.querySelector('.btn-arm');
+  if (!btn) return;
+  if (on) {
+    btn.classList.add('pending');
+    clearTimeout(armPendingTimer);
+    // Safety: auto-clear after 10s if no MQTT confirmation
+    armPendingTimer = setTimeout(() => setArmPending(false), 10000);
+  } else {
+    btn.classList.remove('pending');
+  }
+}
+
+function setDisarmPending(on) {
+  disarmPending = on;
+  const btn = document.querySelector('.btn-disarm');
+  if (!btn) return;
+  if (on) {
+    btn.classList.add('pending');
+    clearTimeout(disarmPendingTimer);
+    disarmPendingTimer = setTimeout(() => setDisarmPending(false), 10000);
+  } else {
+    btn.classList.remove('pending');
+  }
 }
 
 function sendArmAll() { sendArm(); }
@@ -1220,6 +1357,10 @@ function buildFloorplan() {
     if (h > ch) { h = ch; w = ch * ratio; }
     wrap.style.width  = `${w}px`;
     wrap.style.height = `${h}px`;
+    // Scale bubble size proportionally: 28px at full native size, min 14px
+    const scale = w / nat_w;
+    const bsz = Math.max(10, Math.round(28 * scale * BUBBLE_SIZE_SCALE));
+    document.documentElement.style.setProperty('--bubble-sz', `${bsz}px`);
     // Scale native-pixel coords to rendered size
     const scaleX = w / nat_w;
     const scaleY = h / nat_h;
@@ -1234,8 +1375,8 @@ function buildFloorplan() {
   }
 
   const base = document.getElementById('fp-base');
-  base.onload = () => { resize(); };
-  if (base.complete) resize();
+  base.onload = () => { resize(); _cacheElements(); };
+  if (base.complete) { resize(); _cacheElements(); }
   window.addEventListener('resize', resize);
 
   // Create beam layers
@@ -1255,9 +1396,25 @@ function buildFloorplan() {
     div.dataset.id   = s.id;
     div.dataset.label= s.name;
     div.title        = s.name;
-    div.innerHTML    = '<div class="bub-icon"></div>';
+    div.innerHTML    = `<div class="bub-icon"></div>
+      <div class="sensor-warn" id="sensor-warn-${s.id}"></div>`;
     div.addEventListener('click', () => toggleSensor(s.id));
+    // Warn bubble click: show detail (stop propagation to avoid toggleSensor)
     wrap.appendChild(div);
+    const warnDiv = div.querySelector(`#sensor-warn-${s.id}`);
+    warnDiv.addEventListener('click', e => { e.stopPropagation(); showStaleDetail(s.id); });
+  });
+}
+
+// ─── Cached element maps for performance ──────────────────────────
+const _beamEls   = {};
+const _bubbleEls = {};
+const _warnEls   = {};
+function _cacheElements() {
+  SENSOR_CONFIG.forEach(s => {
+    _beamEls[s.id]   = document.querySelector(`.beam-layer[data-id="${s.id}"]`);
+    _bubbleEls[s.id] = document.querySelector(`.sensor-bubble[data-id="${s.id}"]`);
+    _warnEls[s.id]   = document.getElementById(`sensor-warn-${s.id}`);
   });
 }
 
@@ -1272,27 +1429,40 @@ function updateBeams() {
   const wrap = document.getElementById('fp-wrap');
   if (wrap) wrap.classList.toggle('alarming', isAlarming);
 
+  const nowS = Math.floor(Date.now() / 1000);
+
   SENSOR_CONFIG.forEach(s => {
     const st         = sensorStates[s.id] || {};
     const active     = systemArmed && !st.disabled;
-    const triggered  = !!st.triggered;   // set by handleMessage / dev tools
+    const triggered  = !!st.triggered;
+    const stale      = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
     // Beam overlay
-    const beam = document.querySelector(`.beam-layer[data-id="${s.id}"]`);
+    const beam = _beamEls[s.id];
     if (beam) {
       beam.classList.remove('armed', 'triggered');
       if (triggered && active)  beam.classList.add('triggered');
       else if (active)          beam.classList.add('armed');
-      // if inactive: greyscale filter from base CSS remains
     }
 
     // Bubble
-    const bub = document.querySelector(`.sensor-bubble[data-id="${s.id}"]`);
+    const bub = _bubbleEls[s.id];
     if (bub) {
       bub.classList.remove('armed', 'disabled', 'triggered');
-      if (st.disabled)          bub.classList.add('disabled');
+      if (st.disabled)              bub.classList.add('disabled');
       else if (triggered && active) bub.classList.add('triggered');
-      else if (active)          bub.classList.add('armed');
+      else if (active)              bub.classList.add('armed');
+
+      // Stale speech bubble
+      const warn = _warnEls[s.id];
+      if (warn) {
+        if (stale && st.last_seen) {
+          warn.textContent = `⚠ last seen ${staleDuration(nowS, st.last_seen)}`;
+          warn.className = 'sensor-warn stale';
+        } else {
+          warn.className = 'sensor-warn';
+        }
+      }
     }
   });
 }
@@ -1302,34 +1472,52 @@ function updateBeams() {
 // ═══════════════════════════════════════════════════════════════════════════
 function buildSensorCards() {
   const container = document.getElementById('sensor-cards');
-  container.innerHTML = '';
   const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING');
+  const nowS = Math.floor(Date.now() / 1000);
+
+  // First call: build cards once
+  if (!container._built) {
+    container.innerHTML = '';
+    SENSOR_CONFIG.forEach(s => {
+      const card = document.createElement('div');
+      card.className   = 'sensor-card';
+      card.dataset.sid = s.id;
+      card.innerHTML = `
+        <div class="sc-header">
+          <div class="sc-dot" data-role="dot"></div>
+          <div class="sc-name">${s.name}</div>
+          <div class="sc-badge">${s.zone || '—'}</div>
+        </div>
+        <div class="sc-meta" data-role="meta">ID: ${s.id}<br>Beam: beams/${s.beam}</div>
+        <div class="sc-actions" data-role="actions"></div>`;
+      container.appendChild(card);
+    });
+    container._built = true;
+  }
 
   SENSOR_CONFIG.forEach(s => {
+    const card    = container.querySelector(`[data-sid="${s.id}"]`);
+    if (!card) return;
     const st      = sensorStates[s.id] || {};
     const active  = systemArmed && !st.disabled;
     const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
+    const stale   = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
-    const card = document.createElement('div');
     card.className = `sensor-card ${stClass}`;
-    card.innerHTML = `
-      <div class="sc-header">
-        <div class="sc-dot ${stClass}"></div>
-        <div class="sc-name">${s.name}</div>
-        <div class="sc-badge">${s.zone || '—'}</div>
-      </div>
-      <div class="sc-meta">
-        ID: ${s.id}<br>
-        Beam: beams/${s.beam}<br>
-        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}
-        ${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleTimeString()}` : ''}
-      </div>
-      <div class="sc-actions">
-        ${st.disabled
-          ? `<button class="sc-btn primary" onclick="toggleSensor('${s.id}')">Re-enable</button>`
-          : `<button class="sc-btn" onclick="toggleSensor('${s.id}')">Disable…</button>`}
-      </div>`;
-    container.appendChild(card);
+
+    const dot = card.querySelector('[data-role="dot"]');
+    dot.className = `sc-dot ${stClass}`;
+
+    const meta = card.querySelector('[data-role="meta"]');
+    meta.innerHTML = `ID: ${s.id}<br>Beam: beams/${s.beam}<br>Status: ${
+      st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'
+    }${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleString()}` : ''}${
+      stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}`;
+
+    const actions = card.querySelector('[data-role="actions"]');
+    actions.innerHTML = st.disabled
+      ? `<button class="sc-btn primary" onclick="toggleSensor('${s.id}')">Re-enable</button>`
+      : `<button class="sc-btn" onclick="toggleSensor('${s.id}')">Disable…</button>`;
   });
 }
 
@@ -1338,33 +1526,70 @@ function buildSensorCards() {
 // ═══════════════════════════════════════════════════════════════════════════
 function buildSidebarSensors() {
   const container = document.getElementById('sidebar-sensors');
-  container.innerHTML = '';
   const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
+  const nowS = Math.floor(Date.now() / 1000);
 
+  // First call: build rows once
+  if (!container._built) {
+    container.innerHTML = '';
+    SENSOR_CONFIG.forEach(s => {
+      const row = document.createElement('div');
+      row.className   = 'sensor-row';
+      row.dataset.sid = s.id;
+      row.innerHTML = `
+        <div class="s-dot" data-role="dot"></div>
+        <div style="flex:1;min-width:0">
+          <div class="s-name" data-role="name">${s.name}</div>
+          <div class="s-zone" data-role="zone">${s.zone || ''}</div>
+        </div>
+        <button class="s-toggle" data-role="toggle" onclick="toggleSensor('${s.id}')"></button>`;
+      container.appendChild(row);
+    });
+    container._built = true;
+  }
+
+  // Update each row in-place
   SENSOR_CONFIG.forEach(s => {
+    const row    = container.querySelector(`[data-sid="${s.id}"]`);
+    if (!row) return;
     const st      = sensorStates[s.id] || {};
     const active  = systemArmed && !st.disabled;
     const pending = pendingSensors.has(s.id);
-    const stClass = st.disabled ? 'disabled'
+    const stClass = pending       ? 'pending'
+                  : st.disabled   ? 'disabled'
                   : st.triggered && active ? 'triggered'
-                  : active ? 'armed' : 'disarmed';
+                  : active        ? 'armed' : 'disarmed';
 
     const lastTs = st.last_trigger_ts
       ? new Date(st.last_trigger_ts).toLocaleTimeString()
       : (st.last_seen ? new Date(st.last_seen * 1000).toLocaleTimeString() : null);
 
-    const row = document.createElement('div');
-    row.className = 'sensor-row';
-    row.innerHTML = `
-      <div class="s-dot ${stClass}" style="${pending ? 'animation:blink .4s infinite' : ''}"></div>
-      <div style="flex:1;min-width:0">
-        <div class="s-name">${s.name}${st.triggered && active ? ' <span style="color:var(--red);font-size:9px">●TRIG</span>' : ''}${pending ? ' <span style="color:var(--text-muted);font-size:9px">…</span>' : ''}</div>
-        <div class="s-zone">${s.zone || ''}${lastTs ? ` · ${lastTs}` : ''}</div>
-      </div>
-      <button class="s-toggle" onclick="toggleSensor('${s.id}')" ${pending ? 'disabled style="opacity:.4"' : ''}>
-        ${pending ? '…' : st.disabled ? 'enable' : 'disable'}
-      </button>`;
-    container.appendChild(row);
+    const stale  = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
+
+    const dot    = row.querySelector('[data-role="dot"]');
+    const name   = row.querySelector('[data-role="name"]');
+    const zone   = row.querySelector('[data-role="zone"]');
+    const toggle = row.querySelector('[data-role="toggle"]');
+
+    dot.className = `s-dot ${stClass}`;
+
+    name.innerHTML = s.name
+      + (st.triggered && active ? ' <span style="color:var(--red);font-size:9px">●TRIG</span>' : '')
+      + (pending ? ' <span style="color:var(--amber);font-size:9px">…</span>' : '')
+      + (stale ? ' <span style="color:var(--amber);font-size:9px" title="Stale sensor">⚠</span>' : '');
+
+    zone.textContent = (s.zone || '') + (lastTs ? ` · ${lastTs}` : '');
+
+    toggle.textContent = pending ? '…' : st.disabled ? 'enable' : 'disable';
+    toggle.disabled    = !!pending;
+    toggle.style.opacity = pending ? '.4' : '';
+    if (pending) {
+      toggle.style.color       = '#F97316';
+      toggle.style.borderColor = 'rgba(251,146,60,.45)';
+    } else {
+      toggle.style.color = '';
+      toggle.style.borderColor = '';
+    }
   });
 }
 
@@ -1431,6 +1656,67 @@ function setAlarmState(state) {
 }
 
 function updateStateBadge(state) { setAlarmState(state || alarmState); }
+
+// ─── Power status ─────────────────────────────────────────────────
+function updatePowerStatus(data) {
+  // Accept: boolean true/false, {on_mains:bool}, {power:"mains"/"backup"}, string
+  let onMains = true;
+  if (typeof data === 'boolean') {
+    onMains = data;
+  } else if (typeof data === 'object' && data !== null) {
+    if (data.on_mains !== undefined) onMains = !!data.on_mains;
+    else if (data.power !== undefined) onMains = (String(data.power).toLowerCase() !== 'backup');
+  } else if (typeof data === 'string') {
+    onMains = data.toLowerCase() !== 'backup' && data.toLowerCase() !== 'off';
+  }
+  setStatVal('s-power', onMains ? 'On' : 'Off, on backup', onMains ? 'green' : 'amber');
+}
+
+// ─── Stale sensor check ───────────────────────────────────────────
+function isSensorStale(st) {
+  if (!st || !st.last_seen) return false;
+  const nowS = Math.floor(Date.now() / 1000);
+  return (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S;
+}
+
+function staleDuration(nowS, lastSeenS) {
+  const secs  = nowS - lastSeenS;
+  const hours = Math.round(secs / 3600);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days  = Math.round(secs / 86400);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function showStaleDetail(sensorId) {
+  const cfg  = SENSOR_CONFIG.find(s => s.id === sensorId);
+  const st   = sensorStates[sensorId] || {};
+  const nowS = Math.floor(Date.now() / 1000);
+  const dur  = st.last_seen ? staleDuration(nowS, st.last_seen) : 'unknown';
+  const name = cfg?.name || sensorId;
+
+  document.getElementById('sdm-title').textContent = `⚠ ${name} — stale`;
+  document.getElementById('sdm-meta').textContent  =
+    st.last_seen
+      ? `Last seen: ${new Date(st.last_seen * 1000).toLocaleString()} (${dur})`
+      : 'Last seen: never recorded';
+
+  document.getElementById('sdm-body').innerHTML =
+    `This sensor has last been seen <strong>${dur}</strong>. ` +
+    `This may simply mean the monitored area has not been disturbed — ` +
+    `which is normal for low-traffic zones. However, it could also indicate ` +
+    `the sensor is inactive, out of battery, or physically damaged.`;
+
+  document.getElementById('sdm-tip').innerHTML =
+    `<strong>Recommended:</strong> Walk through or otherwise trigger the ` +
+    `<em>${name}</em> sensor when possible to confirm it is functioning correctly. This can be done while the system is disarmed. ` +
+    `If it fails to report after being triggered, check power and connectivity.`;
+
+  document.getElementById('stale-detail-modal').classList.add('open');
+}
+
+function closeStaleDetail() {
+  document.getElementById('stale-detail-modal').classList.remove('open');
+}
 
 function setStatVal(id, val, cls) {
   const el = document.getElementById(id);
