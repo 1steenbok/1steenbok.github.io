@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steenbok — Alarm Control</title>
+<!-- Apply theme before body renders to prevent flash of wrong theme -->
+<script>
+(function(){
+  const m = document.cookie.match(/(?:^|;\s*)alarm_theme=([^;]*)/);
+  const t = m ? m[1] : 'light';
+  if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ─── Design tokens — light (default) ───────────────────────────── */
+:root {
+  --pink:        #C93B6A;
+  --pink-dim:    #8C2A4D;
+  --pink-glow:   rgba(201,59,106,.22);
+  --pink-soft:   rgba(201,59,106,.08);
+  --bg:          #F5F4F0;
+  --bg2:         #ECEAE4;
+  --bg3:         #E0DDD5;
+  --border:      rgba(0,0,0,.10);
+  --border-hi:   rgba(201,59,106,.38);
+  --text:        #1A1916;
+  --text-dim:    #524F48;
+  --text-muted:  #A8A59C;
+  --green:       #1A7A43;
+  --amber:       #A0530A;
+  --red:         #B83232;
+  --radius:      6px;
+  --mono:        'DM Mono', monospace;
+  --sans:        'Syne', sans-serif;
+}
+
+/* ─── Dark theme override ────────────────────────────────────────── */
+[data-theme="dark"] {
+  --pink:        #E8638A;
+  --pink-dim:    #9B3A57;
+  --pink-glow:   rgba(232,99,138,.35);
+  --pink-soft:   rgba(232,99,138,.15);
+  --bg:          #0A0A0C;
+  --bg2:         #111115;
+  --bg3:         #18181E;
+  --border:      rgba(255,255,255,.07);
+  --border-hi:   rgba(232,99,138,.4);
+  --text:        #E8E6E0;
+  --text-dim:    #7A7870;
+  --text-muted:  #3C3A38;
+  --green:       #4ADE80;
+  --amber:       #FBBF24;
+  --red:         #F87171;
+}
+
+/* ─── Theme toggle button ────────────────────────────────────────── */
+.theme-toggle {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text-dim); font-size: 14px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all .2s; flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--pink); color: var(--pink); }
+
+/* ─── Reset / base ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; }
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, textarea, select { font-family: var(--mono); background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; width: 100%; font-size: 12px; }
+input:focus, textarea:focus, select:focus { border-color: var(--border-hi); outline: none; }
+textarea { resize: vertical; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 2px; }
+
+/* ─── Layout ─────────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 20px; height: 48px; border-bottom: 1px solid var(--border);
+  background: var(--bg2); flex-shrink: 0; user-select: none;
+}
+.logo { font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--text); }
+.logo span { color: var(--pink); }
+
+.conn-pill {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  padding: 3px 9px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--bg3);
+}
+.conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); transition: background .3s; }
+.conn-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-dot.err { background: var(--red); }
+.conn-dot.pend { background: var(--amber); animation: blink .8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.state-badge {
+  margin-left: auto; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 20px; border: 1px solid currentColor;
+  transition: all .3s;
+}
+.state-badge.DISARMED   { color: var(--green);  border-color: var(--green);  background: rgba(74,222,128,.08); }
+.state-badge.ARMED      { color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,.08); }
+.state-badge.ENTRY_DELAY{ color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,.12); animation: pulse-amber 1s infinite; }
+.state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,.12); animation: pulse-red .6s infinite; }
+@keyframes pulse-amber { 0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.3)} 50%{box-shadow:0 0 0 6px rgba(251,191,36,0)} }
+@keyframes pulse-red   { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)} 50%{box-shadow:0 0 0 8px rgba(248,113,113,0)} }
+
+/* ─── Tabs ───────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex; gap: 2px; padding: 8px 20px 0;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  padding: 6px 16px 8px; border-radius: 5px 5px 0 0;
+  background: transparent; color: var(--text-dim);
+  border: 1px solid transparent; border-bottom: none;
+  transition: all .2s; cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--bg); color: var(--pink); border-color: var(--border); border-bottom-color: var(--bg); }
+
+/* ─── Tab panels ─────────────────────────────────────────────────── */
+.panel { display: none; flex: 1; overflow: hidden; }
+.panel.active { display: flex; }
+
+/* ─── STATUS TAB ─────────────────────────────────────────────────── */
+#panel-status { flex-direction: row; gap: 0; overflow: hidden; }
+
+/* Floorplan column */
+.floorplan-col {
+  flex: 1; position: relative; overflow: hidden;
+  background: var(--bg); display: flex; align-items: center; justify-content: center;
+}
+.fp-wrap {
+  position: relative; user-select: none;
+  /* size set by JS to fit container maintaining aspect ratio */
+}
+.fp-wrap img.base {
+  display: block; width: 100%; height: 100%;
+  object-fit: contain;
+}
+.fp-wrap .beam-layer {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; pointer-events: none;
+  opacity: var(--beam-inactive-alpha, 0.35);
+  filter: grayscale(100%) brightness(0.55);
+  transition: filter .45s ease, opacity .45s ease;
+}
+.fp-wrap .beam-layer.armed {
+  filter: none;
+  opacity: 1;
+}
+/* Triggered: red flash on the beam image */
+.fp-wrap .beam-layer.triggered {
+  filter: none;
+  opacity: 1;
+  animation: beam-flash .5s infinite;
+}
+@keyframes beam-flash {
+  0%,100% { filter: none; opacity: 1; }
+  50%      { filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3); opacity: .85; }
+}
+
+/* Alarming overlay — red pulsing border around the whole floor plan */
+.fp-wrap::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border: 3px solid transparent; border-radius: 2px;
+  transition: border-color .3s;
+  z-index: 30;
+}
+.fp-wrap.alarming::after {
+  border-color: var(--red);
+  animation: fp-alarm-border .55s infinite;
+}
+@keyframes fp-alarm-border {
+  0%,100% { box-shadow: inset 0 0 0 0 rgba(184,50,50,0),   0 0 0 0 rgba(184,50,50,0); }
+  50%     { box-shadow: inset 0 0 24px 4px rgba(184,50,50,.35), 0 0 18px 4px rgba(184,50,50,.25); }
+}
+/* "Alarming" label top-left of floor plan */
+.fp-alarming-label {
+  position: absolute; top: 10px; left: 10px; z-index: 31;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--red); background: rgba(184,50,50,.12);
+  border: 1px solid var(--red); border-radius: 4px;
+  padding: 3px 10px;
+  animation: label-pulse .55s infinite;
+  display: none;
+}
+.fp-wrap.alarming .fp-alarming-label { display: block; }
+@keyframes label-pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+/* ─── Warning speech bubbles (stale sensor / laser defective) ───── */
+.sensor-warn {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: calc(50% + 2px);
+  min-width: 126px; max-width: 190px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-family: var(--mono); font-size: 8.5px; line-height: 1.45;
+  pointer-events: none; white-space: normal;
+  z-index: 20;
+  display: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,.22);
+}
+/* tail: pointing down-left toward the sensor bubble */
+.sensor-warn::after {
+  content: ''; position: absolute;
+  bottom: -5px; left: 9px;
+  width: 8px; height: 8px;
+  transform: rotate(45deg);
+}
+.sensor-warn.stale {
+  display: block;
+  background: rgba(160,83,10,.10);
+  border: 1px solid var(--amber);
+  color: var(--amber);
+}
+[data-theme="dark"] .sensor-warn.stale { background: rgba(251,191,36,.10); }
+.sensor-warn.stale::after {
+  background: rgba(160,83,10,.10);
+  border-right: 1px solid var(--amber);
+  border-bottom: 1px solid var(--amber);
+}
+[data-theme="dark"] .sensor-warn.stale::after { background: rgba(251,191,36,.10); }
+.sensor-warn.defective {
+  display: block;
+  background: rgba(184,50,50,.10);
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+.sensor-warn.defective::after {
+  background: rgba(184,50,50,.10);
+  border-right: 1px solid var(--red);
+  border-bottom: 1px solid var(--red);
+}
+
+/* ─── Arm / Disarm pending state ─────────────────────────────────── */
+.btn-arm.pending {
+  animation: arm-pulse .65s infinite;
+  cursor: wait;
+  opacity: .75;
+}
+.btn-disarm.pending {
+  animation: disarm-pulse .65s infinite;
+  cursor: wait;
+  opacity: .75;
+}
+@keyframes arm-pulse    { 0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.4)} 50%{box-shadow:0 0 0 6px rgba(251,191,36,0)} }
+@keyframes disarm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.4)} 50%{box-shadow:0 0 0 6px rgba(74,222,128,0)} }
+
+/* ─── Dev test toolbar ───────────────────────────────────────────── */
+/* REMOVE THIS ENTIRE BLOCK when no longer needed */
+#dev-toolbar {
+  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 200;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+  background: var(--bg2); border: 1px solid var(--border-hi);
+  border-radius: 30px; padding: 6px 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.25);
+  font-family: var(--mono); font-size: 10px;
+}
+#dev-toolbar span {
+  color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-right: 4px;
+}
+.dev-btn {
+  font-family: var(--mono); font-size: 10px; padding: 4px 11px;
+  border-radius: 20px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.dev-btn:hover      { border-color: var(--pink); color: var(--pink); }
+.dev-btn.active     { background: var(--pink-soft); border-color: var(--pink); color: var(--pink); }
+.dev-btn.red        { border-color: rgba(184,50,50,.4); color: var(--red); }
+.dev-btn.red:hover  { background: rgba(184,50,50,.1); }
+.dev-btn.red.active { background: rgba(184,50,50,.15); border-color: var(--red); }
+.dev-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+
+/* Sensor bubbles */
+.sensor-bubble {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--pink-dim); border: 2px solid var(--pink);
+  cursor: pointer; transition: all .25s;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10;
+}
+.sensor-bubble::after {
+  content: attr(data-label);
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--bg2); color: var(--text); font-family: var(--mono); font-size: 9px;
+  padding: 3px 7px; border-radius: 3px; border: 1px solid var(--border);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .15s;
+}
+.sensor-bubble:hover::after { opacity: 1; }
+.sensor-bubble.armed {
+  background: var(--pink); box-shadow: 0 0 12px var(--pink-glow);
+}
+.sensor-bubble.armed .bub-icon { opacity: 1; }
+.sensor-bubble.triggered {
+  background: var(--red); border-color: #FF4444;
+  box-shadow: 0 0 0 0 rgba(184,50,50,.6);
+  animation: bub-trigger .5s infinite;
+}
+.sensor-bubble.triggered .bub-icon { opacity: 1; }
+@keyframes bub-trigger {
+  0%,100% { box-shadow: 0 0 0 0 rgba(184,50,50,.7); }
+  50%     { box-shadow: 0 0 0 8px rgba(184,50,50,0); }
+}
+.sensor-bubble.disabled {
+  background: var(--bg3); border-color: var(--text-muted);
+  box-shadow: none;
+}
+.bub-icon {
+  width: 8px; height: 8px;
+  background: rgba(255,255,255,.8);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  opacity: .4; transition: opacity .25s;
+}
+
+/* Controls sidebar */
+.ctrl-col {
+  width: 240px; border-left: 1px solid var(--border); background: var(--bg2);
+  display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+}
+.ctrl-section { padding: 16px; border-bottom: 1px solid var(--border); }
+.ctrl-section h3 {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 12px;
+}
+
+/* Arm/Disarm big buttons */
+.arm-row { display: flex; gap: 8px; }
+.btn-arm, .btn-disarm {
+  flex: 1; padding: 9px 0; border-radius: var(--radius);
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  transition: all .2s;
+}
+.btn-arm {
+  background: rgba(251,191,36,.12); color: var(--amber); border: 1px solid rgba(251,191,36,.35);
+}
+.btn-arm:hover { background: rgba(251,191,36,.22); }
+.btn-disarm {
+  background: rgba(74,222,128,.08); color: var(--green); border: 1px solid rgba(74,222,128,.3);
+}
+.btn-disarm:hover { background: rgba(74,222,128,.16); }
+
+/* PIN input */
+.pin-row { display: flex; gap: 6px; margin-top: 8px; }
+.pin-row input { flex: 1; font-size: 12px; letter-spacing: .2em; }
+.pin-row input::placeholder { letter-spacing: .05em; }
+
+/* Sensor list in sidebar */
+.sensor-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 0;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: all .2s;
+}
+.sensor-row:last-child { border-bottom: none; }
+.sensor-row:hover { opacity: .8; }
+.s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: all .2s; }
+.s-dot.armed     { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
+.s-dot.triggered { background: var(--red);  box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
+.s-dot.disarmed  { background: var(--text-muted); }
+.s-dot.disabled  { background: var(--text-muted); opacity: .4; }
+.s-name { font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex: 1; }
+.s-zone { font-family: var(--mono); font-size: 9px; color: var(--text-muted); }
+.s-toggle {
+  font-family: var(--mono); font-size: 9px; padding: 2px 7px;
+  border-radius: 3px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim);
+  transition: all .15s;
+}
+.s-toggle:hover { border-color: var(--pink); color: var(--pink); }
+
+/* Status readouts */
+.stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.stat-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+.stat-val   { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+.stat-val.green { color: var(--green); }
+.stat-val.amber { color: var(--amber); }
+.stat-val.red   { color: var(--red); }
+.stat-val.pink  { color: var(--pink); }
+
+/* ─── SENSORS TAB ────────────────────────────────────────────────── */
+#panel-sensors { flex-direction: column; padding: 24px; overflow-y: auto; }
+.sensor-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.sensor-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px; transition: border-color .2s;
+}
+.sensor-card.armed   { border-color: rgba(232,99,138,.4); }
+.sensor-card.disabled{ opacity: .5; }
+.sc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sc-dot.armed    { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
+.sc-dot.disarmed { background: var(--text-muted); }
+.sc-dot.disabled { background: var(--text-muted); opacity:.4; }
+.sc-name { font-size: 13px; font-weight: 600; flex: 1; }
+.sc-badge {
+  font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px;
+  border: 1px solid var(--border); color: var(--text-muted);
+}
+.sc-meta { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.7; }
+.sc-actions { display: flex; gap: 6px; }
+.sc-btn {
+  font-family: var(--mono); font-size: 10px; padding: 4px 10px;
+  border-radius: 4px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); transition: all .15s;
+}
+.sc-btn:hover { border-color: var(--pink); color: var(--pink); }
+.sc-btn.primary { border-color: var(--pink-dim); color: var(--pink); background: var(--pink-soft); }
+
+/* ─── CONFIG TAB ─────────────────────────────────────────────────── */
+#panel-config {
+  flex-direction: row; overflow: hidden;
+}
+.config-left {
+  width: 200px; border-right: 1px solid var(--border); background: var(--bg2);
+  padding: 16px 0; overflow-y: auto; flex-shrink: 0;
+}
+.config-right { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 20px; }
+.config-nav-item {
+  padding: 8px 20px; font-family: var(--mono); font-size: 11px; cursor: pointer;
+  color: var(--text-dim); transition: all .15s; border-left: 2px solid transparent;
+}
+.config-nav-item:hover { color: var(--text); background: var(--bg3); }
+.config-nav-item.active { color: var(--pink); border-left-color: var(--pink); background: var(--pink-soft); }
+.config-editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.config-editor-header h2 { font-size: 14px; font-weight: 700; }
+.config-save-btn {
+  font-family: var(--mono); font-size: 11px; padding: 6px 16px;
+  border-radius: var(--radius); background: var(--pink-soft);
+  border: 1px solid var(--pink-dim); color: var(--pink);
+  transition: all .2s;
+}
+.config-save-btn:hover { background: var(--pink); color: #000; }
+#config-textarea {
+  flex: 1; padding: 14px; font-size: 11px; line-height: 1.7;
+  min-height: 0; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg);
+}
+.config-help { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+
+/* ─── LOG TAB ────────────────────────────────────────────────────── */
+#panel-log { flex-direction: column; padding: 0; overflow: hidden; }
+.log-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--bg2);
+}
+.log-clear {
+  font-family: var(--mono); font-size: 10px; padding: 4px 12px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted); transition: all .15s;
+}
+.log-clear:hover { border-color: var(--red); color: var(--red); }
+.log-filter {
+  flex: 1; max-width: 240px; font-size: 11px; padding: 4px 10px;
+}
+.log-body {
+  flex: 1; overflow-y: auto; padding: 8px 0; font-family: var(--mono); font-size: 10px;
+}
+.log-entry {
+  display: flex; gap: 12px; padding: 4px 16px; line-height: 1.5;
+  border-bottom: 1px solid rgba(255,255,255,.02);
+  animation: fadeIn .15s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(-2px)} to{opacity:1;transform:none} }
+.log-ts  { color: var(--text-muted); flex-shrink: 0; }
+.log-dir { width: 14px; flex-shrink: 0; }
+.log-dir.rx { color: var(--green); }
+.log-dir.tx { color: var(--amber); }
+.log-dir.sys { color: var(--text-muted); }
+.log-topic { color: var(--text-dim); flex-shrink: 0; min-width: 220px; }
+.log-msg   { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── Setup / credentials overlay ────────────────────────────────── */
+#setup-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(10,10,12,.96); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+}
+.setup-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 36px 40px; max-width: 440px; width: 100%;
+}
+.setup-card h2 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.setup-card p  { font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.7; }
+.setup-field { margin-bottom: 14px; }
+.setup-field label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: .06em; text-transform: uppercase; display: block; margin-bottom: 5px; }
+.setup-drop {
+  border: 1.5px dashed var(--border); border-radius: 8px;
+  padding: 20px; text-align: center; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+  transition: all .2s; margin-bottom: 20px;
+}
+.setup-drop:hover, .setup-drop.drag { border-color: var(--pink); color: var(--pink); }
+.setup-divider {
+  display: flex; align-items: center; gap: 12px; margin: 20px 0;
+  font-family: var(--mono); font-size: 10px; color: var(--text-muted);
+}
+.setup-divider::before, .setup-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.btn-primary {
+  width: 100%; padding: 11px; border-radius: var(--radius);
+  background: var(--pink); color: #000; font-family: var(--mono);
+  font-size: 12px; font-weight: 500; letter-spacing: .06em;
+  text-transform: uppercase; transition: all .2s;
+}
+.btn-primary:hover { background: #F07095; }
+.setup-error {
+  font-family: var(--mono); font-size: 10px; color: var(--red);
+  margin-top: 10px; display: none;
+}
+
+/* Disable input modal */
+#disable-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(10,10,12,.8); display: none;
+  align-items: center; justify-content: center;
+}
+#disable-modal.open { display: flex; }
+.modal-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 24px 28px; width: 300px;
+}
+.modal-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.modal-card p  { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-bottom: 16px; }
+.modal-row { display: flex; gap: 8px; margin-top: 14px; }
+.modal-row button { flex: 1; padding: 8px; border-radius: var(--radius); font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); transition: all .15s; }
+.modal-row button:hover { border-color: var(--pink); color: var(--pink); }
+.modal-row button.danger { border-color: var(--red); color: var(--red); }
+.modal-row button.danger:hover { background: rgba(248,113,113,.12); }
+/* ─── Responsive — mobile: sidebar moves to bottom ───────────────── */
+@media (max-width: 768px) {
+  html, body { height: auto; overflow: auto; }
+  #app { height: auto; min-height: 100dvh; overflow: visible; }
+
+  header { padding: 0 12px; gap: 10px; }
+  .logo { font-size: 12px; }
+  .state-badge { font-size: 9px; padding: 2px 8px; }
+
+  .tab-bar { overflow-x: auto; flex-wrap: nowrap; padding: 6px 12px 0; gap: 1px; }
+  .tab { padding: 5px 11px 7px; font-size: 10px; white-space: nowrap; }
+
+  /* Status panel: floorplan on top, sidebar below */
+  #panel-status {
+    flex-direction: column !important;
+    overflow: visible !important;
+    height: auto !important;
+    flex: none !important;
+  }
+  .floorplan-col {
+    flex: none !important;
+    width: 100% !important;
+    height: 52vw !important;
+    min-height: 180px !important;
+    max-height: 46vh !important;
+    border-bottom: 1px solid var(--border);
+  }
+  .ctrl-col {
+    width: 100% !important; flex: none !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border);
+    overflow-y: visible !important;
+    max-height: none !important;
+  }
+  .ctrl-section { padding: 12px; }
+  .arm-row { gap: 6px; }
+  .btn-arm, .btn-disarm { padding: 8px 0; font-size: 10px; }
+
+  /* Config panel: nav becomes scrollable row on top */
+  #panel-config { flex-direction: column !important; overflow: visible !important; height: auto !important; flex: none !important; }
+  .config-left {
+    width: 100% !important; border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0;
+    display: flex; flex-direction: row; overflow-x: auto;
+    flex-wrap: nowrap; flex-shrink: 0;
+  }
+  .config-nav-item {
+    padding: 7px 14px; white-space: nowrap; border-left: none !important;
+    border-bottom: 2px solid transparent;
+  }
+  .config-nav-item.active { border-bottom-color: var(--pink); border-left-color: transparent !important; background: var(--pink-soft); }
+  .config-right { overflow: visible !important; flex: none; padding: 12px; }
+  #config-textarea { min-height: 200px; height: 40vh; }
+
+  /* Sensors tab */
+  #panel-sensors { overflow-y: auto; height: auto; flex: none; padding: 16px; }
+
+  /* Log tab */
+  #panel-log { height: auto; flex: none; }
+  .log-body { max-height: calc(100dvh - 160px); }
+
+  /* Dev toolbar — keep it above content on mobile */
+  #dev-toolbar {
+    bottom: auto; top: 52px;
+    font-size: 9px; padding: 4px 10px;
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+  }
+
+  /* Warn bubbles: ensure they don't overflow off-screen */
+  .sensor-warn { max-width: 150px; font-size: 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     CONFIGURATION — edit these to match your layout
+     x/y are native pixel coordinates of SteenbokLayout.png
+     ═══════════════════════════════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────────────────────────────────
+//  DISPLAY CONFIG
+//  INACTIVE_BEAM_ALPHA: opacity of greyscale beams when system not armed
+//  Range 0.0 (invisible) – 1.0 (full opacity).
+// ─────────────────────────────────────────────────────────────────────
+const INACTIVE_BEAM_ALPHA = 0.35;
+
+// ─────────────────────────────────────────────────────────────────────
+//  SENSOR_CONFIG
+//  id:      matches config.sensors key on the Pico
+//  name:    display name
+//  beam:    ./beams/beamN.png filename (shown when armed)
+//  x, y:    bubble position in NATIVE pixels of SteenbokLayout.png
+//           (measure in any image editor — top-left is 0,0)
+//  zone:    metadata only
+// ─────────────────────────────────────────────────────────────────────
+const SENSOR_CONFIG = [
+  { id: "pir_fire_pit",            name: "Fire Pit",        beam: "beam1.png",  x: 663, y: 179, zone: "complex"   },
+  { id: "pir_main_geyser",         name: "Stoep Geyser",    beam: "beam2.png",  x: 455, y: 221, zone: "complex"   },
+  { id: "pir_main_stoep",          name: "Stoep Door",      beam: "beam3.png",  x: 556, y: 298, zone: "fire_pit"  },
+  { id: "pir_container_stoep",     name: "Container Stoep", beam: "beam4.png",  x: 433, y: 311, zone: "fire_pit"  },
+  { id: "pir_container_fence",     name: "Container Fence", beam: "beam5.png",  x: 288, y: 312, zone: "building"  },
+  { id: "pir_main_hallway",        name: "Outdoor Hallway", beam: "beam6.png",  x: 450, y: 288, zone: "building"  },
+  { id: "pir_container_power",     name: "Container Power", beam: "beam7.png",  x: 394, y: 420, zone: "perimeter" },
+  { id: "pir_front_windows",       name: "Front Windows",   beam: "beam8.png",  x: 512, y: 381, zone: "perimeter" },
+  { id: "pir_main_power",          name: "Main Power",      beam: "beam9.png",  x: 667, y: 271, zone: "perimeter" },
+];
+</script>
+
+<!-- Setup overlay -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <h2>Steenbok<span style="color:var(--pink)">.</span></h2>
+    <p>Alarm control panel — first run setup.<br>
+       Drop your <code style="color:var(--pink)">credentials.json</code> file below, or fill in manually.</p>
+
+    <div class="setup-drop" id="cred-drop" onclick="document.getElementById('cred-file').click()">
+      ↓ Drop credentials.json here or click to browse
+      <input type="file" id="cred-file" accept=".json" style="display:none">
+    </div>
+
+    <div class="setup-divider">or enter manually</div>
+
+    <div class="setup-field">
+      <label>HiveMQ Broker host</label>
+      <input id="f-broker" placeholder="xxxx.hivemq.cloud" type="text">
+    </div>
+    <div class="setup-field">
+      <label>WebSocket port (usually 8884)</label>
+      <input id="f-port" placeholder="8884" type="number" value="8884">
+    </div>
+    <div class="setup-field">
+      <label>Username</label>
+      <input id="f-user" placeholder="alarm_user" type="text">
+    </div>
+    <div class="setup-field">
+      <label>Password</label>
+      <input id="f-pass" placeholder="••••••••" type="password">
+    </div>
+    <div class="setup-field">
+      <label>Device ID</label>
+      <input id="f-device" placeholder="diewesemoer" type="text" value="diewesemoer">
+    </div>
+    <div class="setup-field">
+      <label>Command token</label>
+      <input id="f-token" placeholder="shared_secret_token" type="text">
+    </div>
+
+    <button class="btn-primary" onclick="setupConnect()">Connect & Save</button>
+    <div class="setup-error" id="setup-err"></div>
+  </div>
+</div>
+
+<!-- Disable-duration modal -->
+<div id="disable-modal">
+  <div class="modal-card">
+    <h3 id="dm-title">Disable sensor</h3>
+    <p id="dm-sub">Choose how long to disable this sensor.</p>
+    <select id="dm-dur" style="width:100%">
+      <option value="3600">1 hour</option>
+      <option value="14400">4 hours</option>
+      <option value="28800">8 hours</option>
+      <option value="86400" selected>24 hours</option>
+      <option value="0">Permanent (until re-enabled)</option>
+    </select>
+    <div class="modal-row">
+      <button onclick="closeDisableModal()">Cancel</button>
+      <button class="danger" onclick="confirmDisable()">Disable</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main app shell -->
+<div id="app">
+  <header>
+    <div class="logo">Steen<span>bok</span></div>
+    <div class="conn-pill">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-label">disconnected</span>
+    </div>
+    <span class="state-badge DISARMED" id="state-badge">DISARMED</span>
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀︎</button>
+  </header>
+
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('status')">Status</button>
+    <button class="tab" onclick="switchTab('sensors')">Sensors</button>
+    <button class="tab" onclick="switchTab('config')">Config</button>
+    <button class="tab" onclick="switchTab('log')">Log</button>
+    <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
+  </div>
+
+  <!-- STATUS -->
+  <div class="panel active" id="panel-status">
+    <div class="floorplan-col" id="fp-col">
+      <div class="fp-wrap" id="fp-wrap">
+        <img class="base" src="SteenbokLayout.png" alt="Steenbok layout" id="fp-base">
+        <div class="fp-alarming-label">⚠ Alarming</div>
+        <!-- beam layers injected by JS -->
+        <!-- sensor bubbles injected by JS -->
+      </div>
+    </div>
+
+    <div class="ctrl-col">
+      <!-- Arm/disarm controls -->
+      <div class="ctrl-section">
+        <h3>System Control</h3>
+        <div class="arm-row">
+          <button class="btn-arm"    onclick="sendArm()">ARM</button>
+          <button class="btn-disarm" onclick="sendDisarm()">DISARM</button>
+        </div>
+        <div class="pin-row">
+          <input id="pin-input" type="password" placeholder="PIN (if required)" maxlength="8">
+        </div>
+      </div>
+
+      <!-- Quick status -->
+      <div class="ctrl-section">
+        <h3>System Status</h3>
+        <div class="stat-row"><span class="stat-label">State</span>      <span class="stat-val" id="s-state">—</span></div>
+        <div class="stat-row"><span class="stat-label">Source</span>     <span class="stat-val" id="s-source">—</span></div>
+        <div class="stat-row"><span class="stat-label">MQTT</span>       <span class="stat-val" id="s-mqtt">—</span></div>
+        <div class="stat-row"><span class="stat-label">Uptime</span>     <span class="stat-val" id="s-uptime">—</span></div>
+        <div class="stat-row"><span class="stat-label">RAM free</span>   <span class="stat-val" id="s-ram">—</span></div>
+        <div class="stat-row"><span class="stat-label">Last seen</span>  <span class="stat-val" id="s-lastseen">—</span></div>
+      </div>
+
+      <!-- Per-sensor list -->
+      <div class="ctrl-section" style="flex:1">
+        <h3>Sensors</h3>
+        <div id="sidebar-sensors"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SENSORS -->
+  <div class="panel" id="panel-sensors">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
+      <h2 style="font-size:16px;font-weight:800">Sensors</h2>
+      <div style="display:flex;gap:8px">
+        <button class="sc-btn primary" onclick="sendArmAll()">Arm All</button>
+        <button class="sc-btn" onclick="sendDisarmAll()">Disarm All</button>
+      </div>
+    </div>
+    <div class="sensor-cards" id="sensor-cards"></div>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="panel" id="panel-config">
+    <div class="config-left">
+      <div class="config-nav-item active" data-section="full" onclick="selectConfigSection(this,'full')">Full config</div>
+      <div class="config-nav-item" data-section="sensors" onclick="selectConfigSection(this,'sensors')">Sensors</div>
+      <div class="config-nav-item" data-section="rules"   onclick="selectConfigSection(this,'rules')">Rules</div>
+      <div class="config-nav-item" data-section="mqtt"    onclick="selectConfigSection(this,'mqtt')">MQTT</div>
+      <div class="config-nav-item" data-section="gsm"     onclick="selectConfigSection(this,'gsm')">GSM</div>
+      <div class="config-nav-item" data-section="http"    onclick="selectConfigSection(this,'http')">HTTP / ntfy</div>
+      <div class="config-nav-item" data-section="alarm"   onclick="selectConfigSection(this,'alarm')">Alarm</div>
+      <div class="config-nav-item" data-section="channels" onclick="selectConfigSection(this,'channels')">Channels</div>
+    </div>
+    <div class="config-right">
+      <div class="config-editor-header">
+        <h2 id="config-section-title">Full config</h2>
+        <button class="config-save-btn" onclick="publishConfig()">Publish to device ↑</button>
+      </div>
+      <textarea id="config-textarea" spellcheck="false" placeholder="Loading…"></textarea>
+      <p class="config-help">
+        Edits are published via MQTT cmd/{device_id}/config/set · 
+        The device writes to flash + syncs to SD · 
+        Changes marked with <span style="color:var(--pink)">⚠</span> require a reboot to take effect.
+      </p>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel" id="panel-log">
+    <div class="log-toolbar">
+      <span style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">MQTT log</span>
+      <input class="log-filter" id="log-filter" placeholder="Filter topics…" oninput="filterLog()">
+      <label style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--text-muted);cursor:pointer">
+        <input type="checkbox" id="log-autoscroll" checked> autoscroll
+      </label>
+      <button class="log-clear" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="log-body" id="log-body"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let client       = null;
+let credentials  = null;   // {broker, port, username, password, device_id, cmd_token}
+let alarmState   = "DISARMED";
+let sensorStates = {};     // sensor_id → {armed, disabled, last_seen}
+let deviceConfig = null;   // last full config received from device
+let logEntries   = [];
+let configSection = "full";
+let disableTarget = null;
+
+// Credential persistence (cookies, 1-year expiry)
+function saveCreds(c) {
+  const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1);
+  document.cookie = `alarm_creds=${encodeURIComponent(JSON.stringify(c))};expires=${exp.toUTCString()};path=/;SameSite=Strict`;
+  credentials = c;
+}
+function loadCreds() {
+  const m = document.cookie.match(/(?:^|;\s*)alarm_creds=([^;]*)/);
+  if (m) { try { return JSON.parse(decodeURIComponent(m[1])); } catch(e){} }
+  return null;
+}
+function clearCreds() {
+  document.cookie = 'alarm_creds=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/';
+  credentials = null;
+}
+
+// ─── Theme ────────────────────────────────────────────────────────
+function loadThemePref() {
+  const m = document.cookie.match(/(?:^|;\s*)alarm_theme=([^;]*)/);
+  return m ? m[1] : 'light';   // default: light
+}
+function saveThemePref(t) {
+  const exp = new Date(); exp.setFullYear(exp.getFullYear() + 5);
+  document.cookie = `alarm_theme=${t};expires=${exp.toUTCString()};path=/;SameSite=Strict`;
+}
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t === 'dark' ? 'dark' : '';
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☾' : '☀︎';
+}
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  const next    = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  saveThemePref(next);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  applyTheme(loadThemePref());   // apply before first paint
+
+  // Apply configurable inactive beam alpha
+  document.documentElement.style.setProperty('--beam-inactive-alpha', INACTIVE_BEAM_ALPHA);
+
+  buildFloorplan();
+  buildSensorCards();
+  buildSidebarSensors();
+
+  // Populate dev sensor select
+  const sel = document.getElementById('dev-sensor-select');
+  if (sel) {
+    SENSOR_CONFIG.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id; opt.textContent = s.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  credentials = loadCreds();
+  if (credentials) {
+    hideSetup();
+    connect();
+  }
+  // else overlay stays visible
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SETUP / CREDENTIALS
+// ═══════════════════════════════════════════════════════════════════════════
+function hideSetup() { document.getElementById('setup-overlay').style.display = 'none'; }
+function showSetup() { document.getElementById('setup-overlay').style.display = 'flex'; }
+
+// File drop
+const dropArea = document.getElementById('cred-drop');
+dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag'));
+dropArea.addEventListener('drop', e => {
+  e.preventDefault(); dropArea.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) readCredFile(file);
+});
+document.getElementById('cred-file').addEventListener('change', e => {
+  if (e.target.files[0]) readCredFile(e.target.files[0]);
+});
+
+function readCredFile(file) {
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const c = JSON.parse(ev.target.result);
+      populateSetupForm(c);
+      setupConnect();
+    } catch(err) {
+      showSetupError('Invalid JSON file: ' + err.message);
+    }
+  };
+  r.readAsText(file);
+}
+
+function populateSetupForm(c) {
+  if (c.broker)    document.getElementById('f-broker').value = c.broker;
+  if (c.port)      document.getElementById('f-port').value   = c.port;
+  if (c.username || c.user) document.getElementById('f-user').value = c.username || c.user;
+  if (c.password)  document.getElementById('f-pass').value   = c.password;
+  if (c.device_id) document.getElementById('f-device').value = c.device_id;
+  if (c.cmd_token) document.getElementById('f-token').value  = c.cmd_token;
+}
+
+function setupConnect() {
+  const broker    = document.getElementById('f-broker').value.trim();
+  const port      = parseInt(document.getElementById('f-port').value) || 8884;
+  const username  = document.getElementById('f-user').value.trim();
+  const password  = document.getElementById('f-pass').value;
+  const device_id = document.getElementById('f-device').value.trim() || 'diewesemoer';
+  const cmd_token = document.getElementById('f-token').value.trim();
+
+  if (!broker) { showSetupError('Broker host is required.'); return; }
+  if (!username || !password) { showSetupError('Username and password required.'); return; }
+
+  const c = { broker, port, username, password, device_id, cmd_token };
+  saveCreds(c);
+  hideSetup();
+  connect();
+}
+
+function showSetupError(msg) {
+  const el = document.getElementById('setup-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// Called from credentials tab
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const panels = ['status','sensors','config','log','setup'];
+    t.classList.toggle('active', panels[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (name === 'setup') { showSetup(); return; }
+  const p = document.getElementById('panel-' + name);
+  if (p) p.classList.add('active');
+  if (name === 'sensors') buildSensorCards();
+  if (name === 'config')  requestConfig();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MQTT CONNECTION
+// ═══════════════════════════════════════════════════════════════════════════
+function connect() {
+  if (!credentials) return;
+  const { broker, port, username, password, device_id } = credentials;
+
+  setConnStatus('pend', 'connecting…');
+
+  const url = `wss://${broker}:${port}/mqtt`;
+  const clientId = `web_${device_id}_${Math.random().toString(16).slice(2,8)}`;
+
+  client = mqtt.connect(url, {
+    clientId, username, password,
+    clean: true, keepalive: 60,
+    connectTimeout: 10000,
+    reconnectPeriod: 5000,
+  });
+
+  client.on('connect', () => {
+    setConnStatus('ok', broker);
+    sysLog(`Connected to ${broker}`);
+
+    const did = device_id;
+    // Subscribe to all status topics — QOS 1 for reliability
+    client.subscribe(`status/${did}/#`,     { qos: 1 });
+    // Retained state topics
+    client.subscribe(`status/${did}/armed`, { qos: 1 });
+    client.subscribe(`status/${did}/zones`, { qos: 1 });
+    // Heartbeat
+    client.subscribe(`status/${did}/heartbeat`, { qos: 0 });
+    logRx('sys', 'subscribed', `status/${did}/#`);
+  });
+
+  client.on('message', (topic, payload) => {
+    const msg = payload.toString();
+    logRx('rx', topic, msg);
+    handleMessage(topic, msg);
+  });
+
+  client.on('error', err => {
+    setConnStatus('err', 'error');
+    sysLog(`MQTT error: ${err.message}`);
+  });
+
+  client.on('close', () => {
+    setConnStatus('err', 'disconnected');
+    sysLog('MQTT disconnected');
+    updateConnStatus('s-mqtt', 'disconnected', 'red');
+  });
+
+  client.on('reconnect', () => {
+    setConnStatus('pend', 'reconnecting…');
+  });
+}
+
+function publish(topic, payload, qos = 1, retain = false) {
+  if (!client || !client.connected) { sysLog('Publish failed: not connected'); return; }
+  const msg = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
+  client.publish(topic, msg, { qos, retain }, err => {
+    if (err) sysLog(`Publish error: ${err.message}`);
+  });
+  logRx('tx', topic, msg);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MESSAGE HANDLING
+// ═══════════════════════════════════════════════════════════════════════════
+function handleMessage(topic, raw) {
+  let data;
+  try { data = JSON.parse(raw); } catch(e) { data = { raw }; }
+
+  const did = credentials?.device_id || 'diewesemoer';
+
+  // Armed state  (retained, QOS 1)
+  if (topic === `status/${did}/armed` || topic.endsWith('/armed')) {
+    const state = (data.state || data.armed_state || (data.armed ? 'ARMED' : 'DISARMED') || '').toUpperCase();
+    if (state) setAlarmState(state);
+    if (data.source) setStatVal('s-source', data.source);
+    updateStateBadge(state);
+    updateBeams();
+    return;
+  }
+
+  // Zone / sensor states  (retained, QOS 0/1)
+  // Expected payload: { sensor_id: { armed, disabled, triggered, last_trigger_ts, last_seen }, ... }
+  if (topic.endsWith('/zones') || topic.endsWith('/sensor_states')) {
+    if (typeof data === 'object' && !data.raw) {
+      // Clear pending markers for any sensor confirmed by this update
+      Object.keys(data).forEach(sid => pendingSensors.delete(sid));
+      Object.assign(sensorStates, data);
+      updateBeams();
+      buildSidebarSensors();
+      buildSensorCards();
+    }
+    return;
+  }
+
+  // Single sensor trigger event — triggered state cleared only by subsequent MQTT status update
+  if (topic.includes('/triggered') || topic.includes('/breach')) {
+    const sid = data.sensor_id || data.zone_id;
+    if (sid) {
+      if (!sensorStates[sid]) sensorStates[sid] = {};
+      sensorStates[sid].triggered = true;
+      sensorStates[sid].last_trigger_ts = Date.now();
+      updateBeams();
+      buildSidebarSensors();
+    }
+    return;
+  }
+
+  // Heartbeat  (QOS 0)
+  if (topic.endsWith('/heartbeat')) {
+    if (data.uptime)   setStatVal('s-uptime', data.uptime, 'green');
+    if (data.ram_free) setStatVal('s-ram', `${Math.round(data.ram_free/1024)} KB`, 'green');
+    setStatVal('s-lastseen', new Date().toLocaleTimeString(), 'green');
+    setConnStatus('ok', credentials?.broker || '');
+    return;
+  }
+
+  // Config echo  (device publishes its full config here on request)
+  if (topic.endsWith('/config') || topic.endsWith('/config/current')) {
+    deviceConfig = data;
+    refreshConfigEditor();
+    return;
+  }
+
+  // Alarm triggered
+  if (topic.includes('/alarm/') || topic.includes('/triggered')) {
+    setAlarmState('ALARMING');
+    return;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ARM / DISARM COMMANDS
+// ═══════════════════════════════════════════════════════════════════════════
+function makePayload(extra = {}) {
+  const token = credentials?.cmd_token || '';
+  return { token, ...extra };
+}
+
+function sendArm() {
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/arm`, makePayload({ source: 'web' }), 1);
+}
+
+function sendDisarm() {
+  const did  = credentials?.device_id || 'diewesemoer';
+  const pin  = document.getElementById('pin-input').value.trim();
+  publish(`cmd/${did}/disarm`, makePayload({ source: 'web', code: pin || undefined }), 1);
+}
+
+function sendArmAll() { sendArm(); }
+function sendDisarmAll() { sendDisarm(); }
+
+// Per-sensor enable/disable — command only, NO local state change.
+// State updates only when MQTT status reply arrives.
+function toggleSensor(sensorId) {
+  const st  = sensorStates[sensorId] || {};
+  const did = credentials?.device_id || 'diewesemoer';
+  if (st.disabled) {
+    publish(`cmd/${did}/sensor/enable`, makePayload({ sensor_id: sensorId }), 1);
+  } else {
+    openDisableModal(sensorId);
+    return;
+  }
+  markPending(sensorId);
+}
+
+function openDisableModal(sensorId) {
+  disableTarget = sensorId;
+  const cfg = SENSOR_CONFIG.find(s => s.id === sensorId);
+  document.getElementById('dm-title').textContent = `Disable: ${cfg?.name || sensorId}`;
+  document.getElementById('dm-sub').textContent   = 'Choose how long to disable this sensor.';
+  document.getElementById('disable-modal').classList.add('open');
+}
+function closeDisableModal() {
+  document.getElementById('disable-modal').classList.remove('open');
+  disableTarget = null;
+}
+function confirmDisable() {
+  if (!disableTarget) return;
+  const did      = credentials?.device_id || 'diewesemoer';
+  const duration = parseInt(document.getElementById('dm-dur').value);
+  // Publish command only — wait for MQTT status update to confirm
+  publish(`cmd/${did}/sensor/disable`,
+    makePayload({ sensor_id: disableTarget, duration_s: duration }), 1);
+  markPending(disableTarget);
+  closeDisableModal();
+}
+
+// Pending set: sensors awaiting MQTT confirmation.
+// Visual-only — never used to drive actual state.
+const pendingSensors = new Set();
+function markPending(sensorId) {
+  pendingSensors.add(sensorId);
+  // Reflect in sidebar immediately as "pending…" label only
+  buildSidebarSensors();
+  // Safety timeout: if MQTT never replies in 10s, clear the pending marker
+  // so the UI doesn't hang. State itself is unchanged.
+  setTimeout(() => { pendingSensors.delete(sensorId); buildSidebarSensors(); }, 10000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FLOOR PLAN BUILD
+// ═══════════════════════════════════════════════════════════════════════════
+function buildFloorplan() {
+  const wrap = document.getElementById('fp-wrap');
+  const col  = document.getElementById('fp-col');
+
+  // Fit the wrap to the column maintaining image aspect ratio
+  function resize() {
+    const cw = col.clientWidth;
+    const ch = col.clientHeight;
+    const base = document.getElementById('fp-base');
+    const nat_w = base.naturalWidth  || 800;
+    const nat_h = base.naturalHeight || 562;
+    const ratio = nat_w / nat_h;
+    let w = cw, h = cw / ratio;
+    if (h > ch) { h = ch; w = ch * ratio; }
+    wrap.style.width  = `${w}px`;
+    wrap.style.height = `${h}px`;
+    // Scale native-pixel coords to rendered size
+    const scaleX = w / nat_w;
+    const scaleY = h / nat_h;
+    document.querySelectorAll('.sensor-bubble').forEach(b => {
+      const sid = b.dataset.id;
+      const cfg = SENSOR_CONFIG.find(s => s.id === sid);
+      if (cfg) {
+        b.style.left = `${cfg.x * scaleX}px`;
+        b.style.top  = `${cfg.y * scaleY}px`;
+      }
+    });
+  }
+
+  const base = document.getElementById('fp-base');
+  base.onload = () => { resize(); };
+  if (base.complete) resize();
+  window.addEventListener('resize', resize);
+
+  // Create beam layers
+  SENSOR_CONFIG.forEach(s => {
+    const img = document.createElement('img');
+    img.className = 'beam-layer';
+    img.src       = `beams/${s.beam}`;
+    img.dataset.id = s.id;
+    img.alt       = s.name;
+    wrap.appendChild(img);
+  });
+
+  // Create sensor bubbles
+  SENSOR_CONFIG.forEach(s => {
+    const div = document.createElement('div');
+    div.className    = 'sensor-bubble';
+    div.dataset.id   = s.id;
+    div.dataset.label= s.name;
+    div.title        = s.name;
+    div.innerHTML    = '<div class="bub-icon"></div>';
+    div.addEventListener('click', () => toggleSensor(s.id));
+    wrap.appendChild(div);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UPDATE BEAM / BUBBLE STATES
+// ═══════════════════════════════════════════════════════════════════════════
+function updateBeams() {
+  const systemArmed   = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
+  const isAlarming    = alarmState === 'ALARMING';
+
+  // Whole-floorplan alarming border
+  const wrap = document.getElementById('fp-wrap');
+  if (wrap) wrap.classList.toggle('alarming', isAlarming);
+
+  SENSOR_CONFIG.forEach(s => {
+    const st         = sensorStates[s.id] || {};
+    const active     = systemArmed && !st.disabled;
+    const triggered  = !!st.triggered;   // set by handleMessage / dev tools
+
+    // Beam overlay
+    const beam = document.querySelector(`.beam-layer[data-id="${s.id}"]`);
+    if (beam) {
+      beam.classList.remove('armed', 'triggered');
+      if (triggered && active)  beam.classList.add('triggered');
+      else if (active)          beam.classList.add('armed');
+      // if inactive: greyscale filter from base CSS remains
+    }
+
+    // Bubble
+    const bub = document.querySelector(`.sensor-bubble[data-id="${s.id}"]`);
+    if (bub) {
+      bub.classList.remove('armed', 'disabled', 'triggered');
+      if (st.disabled)          bub.classList.add('disabled');
+      else if (triggered && active) bub.classList.add('triggered');
+      else if (active)          bub.classList.add('armed');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SENSOR CARDS (sensors tab)
+// ═══════════════════════════════════════════════════════════════════════════
+function buildSensorCards() {
+  const container = document.getElementById('sensor-cards');
+  container.innerHTML = '';
+  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING');
+
+  SENSOR_CONFIG.forEach(s => {
+    const st      = sensorStates[s.id] || {};
+    const active  = systemArmed && !st.disabled;
+    const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
+
+    const card = document.createElement('div');
+    card.className = `sensor-card ${stClass}`;
+    card.innerHTML = `
+      <div class="sc-header">
+        <div class="sc-dot ${stClass}"></div>
+        <div class="sc-name">${s.name}</div>
+        <div class="sc-badge">${s.zone || '—'}</div>
+      </div>
+      <div class="sc-meta">
+        ID: ${s.id}<br>
+        Beam: beams/${s.beam}<br>
+        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}
+        ${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleTimeString()}` : ''}
+      </div>
+      <div class="sc-actions">
+        ${st.disabled
+          ? `<button class="sc-btn primary" onclick="toggleSensor('${s.id}')">Re-enable</button>`
+          : `<button class="sc-btn" onclick="toggleSensor('${s.id}')">Disable…</button>`}
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SIDEBAR SENSOR LIST
+// ═══════════════════════════════════════════════════════════════════════════
+function buildSidebarSensors() {
+  const container = document.getElementById('sidebar-sensors');
+  container.innerHTML = '';
+  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
+
+  SENSOR_CONFIG.forEach(s => {
+    const st      = sensorStates[s.id] || {};
+    const active  = systemArmed && !st.disabled;
+    const pending = pendingSensors.has(s.id);
+    const stClass = st.disabled ? 'disabled'
+                  : st.triggered && active ? 'triggered'
+                  : active ? 'armed' : 'disarmed';
+
+    const lastTs = st.last_trigger_ts
+      ? new Date(st.last_trigger_ts).toLocaleTimeString()
+      : (st.last_seen ? new Date(st.last_seen * 1000).toLocaleTimeString() : null);
+
+    const row = document.createElement('div');
+    row.className = 'sensor-row';
+    row.innerHTML = `
+      <div class="s-dot ${stClass}" style="${pending ? 'animation:blink .4s infinite' : ''}"></div>
+      <div style="flex:1;min-width:0">
+        <div class="s-name">${s.name}${st.triggered && active ? ' <span style="color:var(--red);font-size:9px">●TRIG</span>' : ''}${pending ? ' <span style="color:var(--text-muted);font-size:9px">…</span>' : ''}</div>
+        <div class="s-zone">${s.zone || ''}${lastTs ? ` · ${lastTs}` : ''}</div>
+      </div>
+      <button class="s-toggle" onclick="toggleSensor('${s.id}')" ${pending ? 'disabled style="opacity:.4"' : ''}>
+        ${pending ? '…' : st.disabled ? 'enable' : 'disable'}
+      </button>`;
+    container.appendChild(row);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CONFIG EDITOR
+// ═══════════════════════════════════════════════════════════════════════════
+function selectConfigSection(el, section) {
+  document.querySelectorAll('.config-nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  configSection = section;
+  document.getElementById('config-section-title').textContent = el.textContent.trim();
+  refreshConfigEditor();
+}
+
+function requestConfig() {
+  if (!credentials) return;
+  const did = credentials.device_id || 'diewesemoer';
+  // Request current config from device
+  publish(`cmd/${did}/config/get`, makePayload(), 1);
+  // Subscribe to config response
+  if (client?.connected) client.subscribe(`status/${did}/config`, { qos: 1 });
+}
+
+function refreshConfigEditor() {
+  const ta = document.getElementById('config-textarea');
+  if (!deviceConfig) { ta.value = '// Waiting for device config…\n// Click "Publish to device" after editing.'; return; }
+
+  let data;
+  if (configSection === 'full') {
+    data = deviceConfig;
+  } else {
+    data = deviceConfig[configSection] || {};
+  }
+  ta.value = JSON.stringify(data, null, 2);
+}
+
+function publishConfig() {
+  if (!credentials) { alert('Not connected'); return; }
+  const ta  = document.getElementById('config-textarea');
+  let parsed;
+  try { parsed = JSON.parse(ta.value); }
+  catch(e) { alert('Invalid JSON: ' + e.message); return; }
+
+  const did = credentials.device_id || 'diewesemoer';
+  if (configSection === 'full') {
+    publish(`cmd/${did}/config/set`, makePayload({ config: parsed }), 1);
+  } else {
+    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed }), 1);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function setAlarmState(state) {
+  alarmState = state;
+  const badge = document.getElementById('state-badge');
+  badge.textContent = state;
+  badge.className   = `state-badge ${state}`;
+  setStatVal('s-state', state,
+    state === 'DISARMED' ? 'green' :
+    state === 'ARMED'    ? 'amber' :
+    state === 'ALARMING' ? 'red'   : 'pink');
+}
+
+function updateStateBadge(state) { setAlarmState(state || alarmState); }
+
+function setStatVal(id, val, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.className   = 'stat-val' + (cls ? ' ' + cls : '');
+}
+
+function updateConnStatus(id, txt, cls) { setStatVal(id, txt, cls); }
+
+function setConnStatus(type, label) {
+  const dot   = document.getElementById('conn-dot');
+  const lbl   = document.getElementById('conn-label');
+  dot.className = 'conn-dot ' + type;
+  lbl.textContent = label;
+  updateConnStatus('s-mqtt', label, type === 'ok' ? 'green' : type === 'err' ? 'red' : 'amber');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════════════════════════════
+const MAX_LOG = 400;
+
+function logRx(dir, topic, msg) {
+  const ts = new Date().toLocaleTimeString();
+  logEntries.push({ ts, dir, topic, msg });
+  if (logEntries.length > MAX_LOG) logEntries.shift();
+  appendLogEntry({ ts, dir, topic, msg });
+}
+
+function sysLog(msg) { logRx('sys', 'system', msg); }
+
+function appendLogEntry({ ts, dir, topic, msg }) {
+  const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
+  if (filter && !topic.toLowerCase().includes(filter) && !msg.toLowerCase().includes(filter)) return;
+
+  const body  = document.getElementById('log-body');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.dataset.topic = topic;
+  entry.dataset.msg   = msg;
+  entry.innerHTML = `
+    <span class="log-ts">${ts}</span>
+    <span class="log-dir ${dir}">${dir === 'rx' ? '↓' : dir === 'tx' ? '↑' : '·'}</span>
+    <span class="log-topic">${topic}</span>
+    <span class="log-msg">${escHtml(msg)}</span>`;
+  body.appendChild(entry);
+
+  if (logEntries.length > MAX_LOG) {
+    while (body.children.length > MAX_LOG) body.removeChild(body.firstChild);
+  }
+
+  const auto = document.getElementById('log-autoscroll');
+  if (auto?.checked) body.scrollTop = body.scrollHeight;
+}
+
+function filterLog() {
+  const filter = document.getElementById('log-filter').value.toLowerCase();
+  document.querySelectorAll('.log-entry').forEach(el => {
+    const match = !filter ||
+      el.dataset.topic.toLowerCase().includes(filter) ||
+      (el.dataset.msg || '').toLowerCase().includes(filter);
+    el.style.display = match ? '' : 'none';
+  });
+}
+
+function clearLog() {
+  document.getElementById('log-body').innerHTML = '';
+  logEntries = [];
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  DEV TEST FUNCTIONS — remove when no longer needed
+//  All dev actions simulate what the Pico would actually publish back.
+//  They call handleMessage() with real MQTT topic+payload shapes so the
+//  exact same code path runs as in production.
+// ═══════════════════════════════════════════════════════════════════════════
+function devDid() { return credentials?.device_id || 'diewesemoer'; }
+
+function devEmit(topic, payload) {
+  const raw = JSON.stringify(payload);
+  logRx('rx', `[DEV] ${topic}`, raw);
+  handleMessage(topic, raw);
+}
+
+function devSetState(state) {
+  // Highlight active state button
+  event.target.closest('#dev-toolbar').querySelectorAll('.dev-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const did = devDid();
+  // Emit a realistic /armed status update (what the Pico publishes on state change)
+  devEmit(`status/${did}/armed`, {
+    state:  state,
+    source: 'dev_test',
+    armed:  state !== 'DISARMED',
+  });
+
+  // Also emit a full zones update reflecting the new system state so beams update correctly
+  const systemArmed = (state === 'ARMED' || state === 'ALARMING' || state === 'ENTRY_DELAY');
+  const zonesPayload = {};
+  SENSOR_CONFIG.forEach(s => {
+    const existing = sensorStates[s.id] || {};
+    zonesPayload[s.id] = {
+      ...existing,
+      armed:    systemArmed && !existing.disabled,
+      triggered: existing.triggered || false,
+    };
+  });
+  devEmit(`status/${did}/zones`, zonesPayload);
+}
+
+function devTriggerSensor() {
+  const sel = document.getElementById('dev-sensor-select');
+  if (!sel?.value) return;
+  const sid = sel.value;
+  const did = devDid();
+
+  // Emit the breach event first (what ZoneController publishes)
+  devEmit(`status/${did}/triggered`, {
+    sensor_id: sid,
+    zone_id:   SENSOR_CONFIG.find(s => s.id === sid)?.zone || '',
+  });
+
+  // Then emit a zones update with triggered: true for this sensor
+  // (what AlarmManager publishes after processing the breach)
+  const zonesPayload = {};
+  SENSOR_CONFIG.forEach(s => {
+    const existing = sensorStates[s.id] || {};
+    zonesPayload[s.id] = {
+      ...existing,
+      triggered: s.id === sid ? true : (existing.triggered || false),
+      last_trigger_ts: s.id === sid ? Math.floor(Date.now() / 1000) : (existing.last_trigger_ts || null),
+    };
+  });
+  devEmit(`status/${did}/zones`, zonesPayload);
+}
+
+function devClearTriggers() {
+  const did = devDid();
+  // Emit a zones update with all triggered flags cleared
+  const zonesPayload = {};
+  SENSOR_CONFIG.forEach(s => {
+    zonesPayload[s.id] = { ...(sensorStates[s.id] || {}), triggered: false };
+  });
+  devEmit(`status/${did}/zones`, zonesPayload);
+}
+
+function devDisableSensor() {
+  const sel = document.getElementById('dev-sensor-select');
+  if (!sel?.value) return;
+  const sid = sel.value;
+  const did = devDid();
+  const zonesPayload = {};
+  SENSOR_CONFIG.forEach(s => {
+    zonesPayload[s.id] = {
+      ...(sensorStates[s.id] || {}),
+      disabled: s.id === sid ? true : (sensorStates[s.id]?.disabled || false),
+    };
+  });
+  devEmit(`status/${did}/zones`, zonesPayload);
+}
+
+function devEnableSensor() {
+  const sel = document.getElementById('dev-sensor-select');
+  if (!sel?.value) return;
+  const sid = sel.value;
+  const did = devDid();
+  const zonesPayload = {};
+  SENSOR_CONFIG.forEach(s => {
+    zonesPayload[s.id] = {
+      ...(sensorStates[s.id] || {}),
+      disabled: s.id === sid ? false : (sensorStates[s.id]?.disabled || false),
+    };
+  });
+  devEmit(`status/${did}/zones`, zonesPayload);
+}
+
+let devToolbarVisible = true;
+function devToggleToolbar() {
+  const tb = document.getElementById('dev-toolbar');
+  if (!tb) return;
+  devToolbarVisible = !devToolbarVisible;
+  tb.style.opacity       = devToolbarVisible ? '1' : '0';
+  tb.style.pointerEvents = devToolbarVisible ? '' : 'none';
+}
+</script>
+<!-- ═══ DEV TEST TOOLBAR — remove this entire block when done ═══ -->
+<div id="dev-toolbar">
+  <span>dev</span>
+  <button class="dev-btn" onclick="devSetState('DISARMED')">Disarmed</button>
+  <button class="dev-btn" onclick="devSetState('ARMED')">Armed</button>
+  <button class="dev-btn" onclick="devSetState('ENTRY_DELAY')">Entry delay</button>
+  <button class="dev-btn red" onclick="devSetState('ALARMING')">Alarming</button>
+  <div class="dev-sep"></div>
+  <select id="dev-sensor-select" style="font-family:var(--mono);font-size:10px;padding:3px 6px;background:var(--bg3);color:var(--text-dim);border:1px solid var(--border);border-radius:12px;cursor:pointer"></select>
+  <button class="dev-btn red" onclick="devTriggerSensor()">Trigger</button>
+  <button class="dev-btn" onclick="devClearTriggers()">Clear triggers</button>
+  <button class="dev-btn" onclick="devDisableSensor()">Disable</button>
+  <button class="dev-btn" onclick="devEnableSensor()">Enable</button>
+  <div class="dev-sep"></div>
+  <button class="dev-btn" onclick="devToggleToolbar()" style="opacity:.5">hide</button>
+</div>
+<!-- ═══ end dev toolbar ═══ -->
+</html>
