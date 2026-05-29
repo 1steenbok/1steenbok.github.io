@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Steenbok — Alarm Control</title>
+<title>Steenbok Alarm Control</title>
 <!-- Apply theme before body renders to prevent flash of wrong theme -->
 <script>
 (function(){
@@ -114,10 +114,10 @@ header {
   transition: all .3s;
 }
 .state-badge.DISARMED   { color: var(--green);  border-color: var(--green);  background: rgba(74,222,128,.08); }
-.state-badge.ARMED      { color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,.08); }
-.state-badge.ENTRY_DELAY{ color: var(--amber);  border-color: var(--amber);  background: rgba(251,191,36,0.67); animation: pulse-amber 1s infinite; }
+.state-badge.ARMED      { color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); }
+.state-badge.ENTRY_DELAY{ color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); animation: pulse-pink 1s infinite; }
 .state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,0.67); animation: pulse-red .6s infinite; }
-@keyframes pulse-amber { 0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.3)} 50%{box-shadow:0 0 0 6px rgba(251,191,36,0)} }
+@keyframes pulse-pink   { 0%,100%{box-shadow:0 0 0 0 var(--pink-glow)} 50%{box-shadow:0 0 0 6px rgba(201,59,106,0)} }
 @keyframes pulse-red   { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)} 50%{box-shadow:0 0 0 8px rgba(248,113,113,0)} }
 
 /* ─── Tabs ───────────────────────────────────────────────────────── */
@@ -283,32 +283,6 @@ header {
   animation: blink .4s infinite !important;
 }
 
-/* ─── Dev test toolbar ───────────────────────────────────────────── */
-#dev-toolbar {
-  position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
-  z-index: 200;
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
-  background: var(--bg2); border: 1px solid var(--border-hi);
-  border-radius: 30px; padding: 6px 14px;
-  box-shadow: 0 4px 24px rgba(0,0,0,.25);
-  font-family: var(--mono); font-size: 10px;
-}
-#dev-toolbar span {
-  color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-right: 4px;
-}
-.dev-btn {
-  font-family: var(--mono); font-size: 10px; padding: 4px 11px;
-  border-radius: 20px; border: 1px solid var(--border);
-  background: transparent; color: var(--text-dim);
-  cursor: pointer; transition: all .15s; white-space: nowrap;
-}
-.dev-btn:hover      { border-color: var(--pink); color: var(--pink); }
-.dev-btn.active     { background: var(--pink-soft); border-color: var(--pink); color: var(--pink); }
-.dev-btn.red        { border-color: rgba(184,50,50,.4); color: var(--red); }
-.dev-btn.red:hover  { background: rgba(184,50,50,.1); }
-.dev-btn.red.active { background: rgba(184,50,50,.15); border-color: var(--red); }
-.dev-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
-
 /* Raise stale bubble above alarming overlays (z-index 30/31) */
 .sensor-bubble:has(.sensor-warn.stale) { z-index: 50; }
 .sensor-bubble {
@@ -377,9 +351,9 @@ header {
   transition: all .2s;
 }
 .btn-arm {
-  background: rgba(251,191,36,0.67); color: var(--amber); border: 1px solid rgba(251,191,36,.35);
+  background: var(--pink-soft); color: var(--pink); border: 1px solid var(--pink-dim);
 }
-.btn-arm:hover { background: rgba(251,191,36,.22); }
+.btn-arm:hover { background: var(--pink-glow); }
 .btn-disarm {
   background: rgba(74,222,128,.08); color: var(--green); border: 1px solid rgba(74,222,128,.3);
 }
@@ -428,6 +402,7 @@ header {
 .sensor-card {
   background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
   padding: 14px 16px; transition: border-color .2s;
+  color: var(--text); /* Default high-contrast standard text */
 }
 .sensor-card.armed   { border-color: rgba(232,99,138,.4); }
 .sensor-card.disabled{ opacity: .5; }
@@ -439,9 +414,9 @@ header {
 .sc-name { font-size: 13px; font-weight: 600; flex: 1; }
 .sc-badge {
   font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px;
-  border: 1px solid var(--border); color: var(--text-muted);
+  border: 1px solid var(--border); color: var(--text-dim); /* High contrast color */
 }
-.sc-meta { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.7; }
+.sc-meta { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.7; /* High contrast color */ }
 .sc-actions { display: flex; gap: 6px; }
 .sc-btn {
   font-family: var(--mono); font-size: 10px; padding: 4px 10px;
@@ -449,7 +424,7 @@ header {
   background: transparent; color: var(--text-dim); transition: all .15s;
 }
 .sc-btn:hover { border-color: var(--pink); color: var(--pink); }
-.sc-btn.primary { border-color: var(--pink-dim); color: var(--pink); background: var(--pink-soft); }
+.sc-btn.primary { border-color: var(--pink-dim); color: var(--pink); background: var(--pink-soft); background-color: var(--pink-soft); }
 
 /* ─── CONFIG TAB ─────────────────────────────────────────────────── */
 #panel-config {
@@ -515,14 +490,14 @@ header {
 .log-dir.tx { color: var(--amber); }
 .log-dir.sys { color: var(--text-muted); }
 .log-topic { color: var(--text-dim); flex-shrink: 0; min-width: 220px; }
-.log-msg   { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-msg   { color: var(--text); overflow-x: auto; min-width: 0; flex: 1; }
 
-/* Prism JSON override styling */
+/* Prism JSON override styling - preserves single-line overflow scrolling without row-stretching */
 .log-msg pre {
   background: transparent !important; margin: 0 !important; padding: 0 !important;
   font-size: 10px !important; font-family: var(--mono) !important;
-  white-space: pre-wrap !important; word-break: break-all !important;
-  display: inline;
+  white-space: pre !important; word-break: normal !important;
+  display: inline-block;
 }
 .log-msg code {
   background: transparent !important; padding: 0 !important;
@@ -808,7 +783,7 @@ function initSensorConfigDefaults() {
   SENSOR_CONFIG = Object.keys(SENSOR_LOCATIONS).map((id, index) => {
     return {
       id: id,
-      name: id.replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase()),
+      name: id.replace(/_/g, ' ').replace(/ \w/g, c => c.toUpperCase()),
       beam: `beam${index + 1}.png`,
       x: SENSOR_LOCATIONS[id].x,
       y: SENSOR_LOCATIONS[id].y,
@@ -841,7 +816,9 @@ function updateSensorConfigFromDevice() {
       beam: beam,
       x: loc.x,
       y: loc.y,
-      zone: s.zone || 'perimeter'
+      zone: s.zone || 'perimeter',
+      codes: s.codes, // Copy associated RF codes array from device config metadata
+      code: s.code // Keep single code fallback
     });
   });
 
@@ -1028,7 +1005,7 @@ function updateSensorConfigFromDevice() {
         <div id="offline-warning">
           <div style="font-size:32px; color:var(--amber); margin-bottom:8px;">⚠️</div>
           <div style="font-size:12px; font-weight:bold; margin-bottom:6px; font-family:var(--mono);">OFFLINE WARNING</div>
-          <div style="font-size:10px; font-family:var(--mono); line-height:1.4; margin-bottom:12px; color:var(--text-dim);">Device heartbeat has stopped (over 1 hour). It appears offline. Verify by SMSing "status".</div>
+          <div style="font-size:10px; font-family:var(--mono); line-height:1.4; margin-bottom:12px; color:var(--text-dim);">Device heartbeat has stopped. It cannot be reached over the internet. Verify device is on by SMSing "status" to the alarm number.</div>
           <button onclick="dismissOfflineWarning()" style="font-family:var(--mono); font-size:9px; padding:4px 10px; border-radius:4px; background:var(--amber); color:#000; border:none; cursor:pointer;">Dismiss</button>
         </div>
       </div>
@@ -1146,7 +1123,7 @@ function updateSensorConfigFromDevice() {
         <button class="sc-btn" onclick="clearEventsList()">Clear Events View</button>
       </div>
     </div>
-    <div class="log-body" id="events-log-body" style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:10px; max-height:calc(100vh - 180px); overflow-y:auto;"></div>
+    <div class="log-body" id="events-log-body" style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:10px; max-height:calc(100vh - 180px); overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column;"></div>
   </div>
 
   <!-- LOG -->
@@ -1185,6 +1162,7 @@ let disarmPendingTimer = null;
 let lastSource = "";
 let offlineWarningDismissed = false;
 let lastHeartbeatTimeS = null;
+let deviceLastSeenS = null; // Explicit last seen timestamp from incoming MQTT payloads
 let notificationsCollapsed = false;
 let activeActionNotifications = [];
 let alarmTextRatioCache = null;
@@ -1205,7 +1183,7 @@ async function sha256(message) {
 // ─── Relative time formatter ──────────────────────────────────────
 function timeAgo(ts) {
   if (!ts) return '';
-  const diff = Math.floor(Date.now() / 1000) - ts;
+  const diff = Math.max(0, Math.floor(Date.now() / 1000) - ts);
   if (diff < 60) return '(just now)';
   const mins = Math.floor(diff / 60);
   if (mins < 60) return `(${mins} min${mins === 1 ? '' : 's'} ago)`;
@@ -1215,12 +1193,25 @@ function timeAgo(ts) {
   return `(${days} day${days === 1 ? '' : 's'} ago)`;
 }
 
+// ─── Device Last Seen Status ──────────────────────────────────────
+function updateDeviceLastSeen() {
+  if (!deviceLastSeenS) {
+    setStatVal('s-lastseen', '—');
+    return;
+  }
+  const timeStr = new Date(deviceLastSeenS * 1000).toLocaleTimeString();
+  const agoStr = timeAgo(deviceLastSeenS);
+  setStatVal('s-lastseen', `${timeStr} ${agoStr}`, 'green');
+}
+
 // ─── Offline monitoring ───────────────────────────────────────────
 function checkOfflineStatus() {
+  updateDeviceLastSeen(); // Periodically update relative seen text
   if (offlineWarningDismissed) return;
   const nowS = Math.floor(Date.now() / 1000);
   const popup = document.getElementById('offline-warning');
-  if (lastHeartbeatTimeS && (nowS - lastHeartbeatTimeS > 3600)) {
+  const lastSeen = deviceLastSeenS || lastHeartbeatTimeS;
+  if (lastSeen && (nowS - lastSeen > 540)) {
     if (popup) popup.style.display = 'block';
   } else {
     if (popup) popup.style.display = 'none';
@@ -1384,6 +1375,13 @@ function switchTab(name) {
   if (name === 'sensors') { buildSensorCards(); buildRemoteCards(); }
   if (name === 'config')  requestConfig();
   if (name === 'events')  requestEventsList();
+
+  // Recalculate and adjust visual alignment and coordinates on return to the status view
+  if (name === 'status') {
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1459,10 +1457,6 @@ function handleMessage(topic, raw) {
   try { data = JSON.parse(raw); } catch(e) { data = { raw }; }
 
   const did = credentials?.device_id || 'diewesemoer';
-
-  // Mark that we received data from the device
-  lastHeartbeatTimeS = Math.floor(Date.now() / 1000);
-  checkOfflineStatus();
 
   // Alarm triggered event (with delivery acknowledgement)
   if (topic === `alarm/${did}/triggered`) {
@@ -1555,17 +1549,26 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Heartbeat
+  // Heartbeat - Exclusively tracks the "Last seen" timestamp based on device's heartbeat packets
   if (topic.endsWith('/heartbeat')) {
+    let ts = data.utc_ts || data.t || data.ts || data.timestamp || data.time;
+    if (ts) {
+      ts = Number(ts);
+      if (ts > 9999999999) ts = Math.floor(ts / 1000); // Standardize milliseconds to seconds
+      deviceLastSeenS = ts;
+      lastHeartbeatTimeS = deviceLastSeenS;
+    }
+    checkOfflineStatus();
+
     if (data.uptime)   setStatVal('s-uptime', data.uptime, 'green');
     if (data.ram_free) setStatVal('s-ram', `${Math.round(data.ram_free/1024)} KB`, 'green');
-    setStatVal('s-lastseen', new Date().toLocaleTimeString(), 'green');
     setConnStatus('ok', credentials?.broker || '');
-    if (data.power !== undefined) updatePowerStatus(data.power);
+    if (data.power !== undefined || data.on_mains !== undefined) updatePowerStatus(data);
 
-    // SD Card free space readout
-    if (data.sd_free_kb !== undefined) {
-      setStatVal('s-sdfree', data.sd_free_kb >= 0 ? `${Math.round(data.sd_free_kb / 1024)} MB` : "not detected", 'green');
+    // SD Card free space readout - parses free_kb or sd_free_kb
+    let freeKb = data.free_kb !== undefined ? data.free_kb : data.sd_free_kb;
+    if (freeKb !== undefined) {
+      setStatVal('s-sdfree', freeKb >= 0 ? `${Math.round(freeKb / 1024)} MB` : "not detected", 'green');
     } else {
       setStatVal('s-sdfree', "not detected", 'amber');
     }
@@ -1601,12 +1604,112 @@ function makePayload(extra = {}) {
   return { token, ...extra };
 }
 
+// ─── Map Coordinates scaling alignment and coordinates update ──────
+function buildFloorplan() {
+  const wrap = document.getElementById('fp-wrap');
+  const col  = document.getElementById('fp-col');
+
+  function resize() {
+    const cw = col.clientWidth;
+    const ch = col.clientHeight;
+
+    // Prevent zero-size recalculation when status tab layout is hidden (display: none)
+    if (cw === 0 || ch === 0) return;
+
+    const base = document.getElementById('fp-base');
+    const nat_w = base.naturalWidth  || 800;
+    const nat_h = base.naturalHeight || 562;
+    const ratio = nat_w / nat_h;
+
+    // Mathematically scale the floorplan wrap box to consume exactly 90% of available viewport area
+    let w = cw * 0.9;
+    let h = w / ratio;
+    if (h > ch * 0.9) {
+      h = ch * 0.9;
+      w = h * ratio;
+    }
+    wrap.style.width  = `${w}px`;
+    wrap.style.height = `${h}px`;
+
+    const scale = w / nat_w;
+    const bsz = Math.max(10, Math.round(28 * scale * BUBBLE_SIZE_SCALE));
+    document.documentElement.style.setProperty('--bubble-sz', `${bsz}px`);
+    const scaleX = w / nat_w;
+    const scaleY = h / nat_h;
+    document.querySelectorAll('.sensor-bubble').forEach(b => {
+      const sid = b.dataset.id;
+      const cfg = SENSOR_CONFIG.find(s => s.id === sid);
+      if (cfg) {
+        b.style.left = `${cfg.x * scaleX}px`;
+        b.style.top  = `${cfg.y * scaleY}px`;
+        b.classList.add('positioned');
+      }
+    });
+
+    document.querySelectorAll('.beam-layer').forEach(img => {
+      img.classList.add('positioned');
+    });
+
+    scaleAlarmingText();
+  }
+
+  // 1. Remove existing layers and bubbles first
+  wrap.querySelectorAll('.beam-layer, .sensor-bubble').forEach(el => el.remove());
+
+  // 2. Create beam layers
+  SENSOR_CONFIG.forEach(s => {
+    const img = document.createElement('img');
+    img.className = 'beam-layer';
+    img.src       = `beams/${s.beam}`;
+    img.dataset.id = s.id;
+    img.alt       = "";
+    wrap.appendChild(img);
+  });
+
+  // 3. Create new sensor bubbles
+  SENSOR_CONFIG.forEach(s => {
+    const div = document.createElement('div');
+    div.className    = 'sensor-bubble';
+    div.dataset.id   = s.id;
+    div.dataset.label= s.name;
+    div.title        = s.name;
+    div.innerHTML    = `<div class="bub-icon"></div>
+      <div class="sensor-warn" id="sensor-warn-${s.id}"></div>`;
+    div.addEventListener('click', () => toggleSensor(s.id));
+    wrap.appendChild(div);
+    const warnDiv = div.querySelector(`#sensor-warn-${s.id}`);
+    warnDiv.addEventListener('click', e => { e.stopPropagation(); showStaleDetail(s.id); });
+  });
+
+  _cacheElements();
+
+  // 4. Bind position measurements and load listeners AFTER elements are in the DOM
+  const base = document.getElementById('fp-base');
+  base.onload = () => { resize(); _cacheElements(); };
+  if (base.complete) { resize(); _cacheElements(); }
+
+  // Use window.onresize to cleanly overwrite previous listeners on rebuild
+  window.onresize = resize;
+}
+
+const _beamEls   = {};
+const _bubbleEls = {};
+const _warnEls   = {};
+function _cacheElements() {
+  SENSOR_CONFIG.forEach(s => {
+    _beamEls[s.id]   = document.querySelector(`.beam-layer[data-id="${s.id}"]`);
+    _bubbleEls[s.id] = document.querySelector(`.sensor-bubble[data-id="${s.id}"]`);
+    _warnEls[s.id]   = document.getElementById(`sensor-warn-${s.id}`);
+  });
+}
+
 function sendArm() {
   const did = credentials?.device_id || 'diewesemoer';
   publish(`cmd/${did}/arm`, makePayload({ source: 'web' }), 1);
   setArmPending(true);
 }
 
+// ─── Control execution logic ──────────────────────────────────────
 function sendDisarm() {
   const did  = credentials?.device_id || 'diewesemoer';
   const pin  = document.getElementById('pin-input').value.trim();
@@ -1704,7 +1807,7 @@ function triggerSOS() {
     const confirmBox = document.getElementById('sos-confirm-box');
     const tapCountSpan = document.getElementById('sos-tap-count');
     const timeCountSpan = document.getElementById('sos-time-count');
-    
+
     if (confirmBox && tapCountSpan && timeCountSpan) {
       tapCountSpan.textContent = sosTapState.tapsRemaining;
       timeCountSpan.textContent = sosTapState.secondsRemaining;
@@ -1784,6 +1887,7 @@ function getActionIcon(type) {
   return 'ℹ️';
 }
 
+// ─── Event display border styles ──────────────────────────────────
 function getActionBorderColor(type) {
   const t = String(type || '').toLowerCase();
   if (t.includes('fail') || t.includes('error')) return 'var(--red)';
@@ -1851,103 +1955,6 @@ function addActionNotification(entry, animate = true) {
   } else {
     div.classList.add('show');
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  FLOOR PLAN BUILD
-// ═══════════════════════════════════════════════════════════════════════════
-function buildFloorplan() {
-  const wrap = document.getElementById('fp-wrap');
-  const col  = document.getElementById('fp-col');
-
-  function resize() {
-    const cw = col.clientWidth;
-    const ch = col.clientHeight;
-    const base = document.getElementById('fp-base');
-    const nat_w = base.naturalWidth  || 800;
-    const nat_h = base.naturalHeight || 562;
-    const ratio = nat_w / nat_h;
-
-    // Mathematically scale the floorplan wrap box to consume exactly 90% of available viewport area
-    let w = cw * 0.9;
-    let h = w / ratio;
-    if (h > ch * 0.9) {
-      h = ch * 0.9;
-      w = h * ratio;
-    }
-    wrap.style.width  = `${w}px`;
-    wrap.style.height = `${h}px`;
-
-    const scale = w / nat_w;
-    const bsz = Math.max(10, Math.round(28 * scale * BUBBLE_SIZE_SCALE));
-    document.documentElement.style.setProperty('--bubble-sz', `${bsz}px`);
-    const scaleX = w / nat_w;
-    const scaleY = h / nat_h;
-    document.querySelectorAll('.sensor-bubble').forEach(b => {
-      const sid = b.dataset.id;
-      const cfg = SENSOR_CONFIG.find(s => s.id === sid);
-      if (cfg) {
-        b.style.left = `${cfg.x * scaleX}px`;
-        b.style.top  = `${cfg.y * scaleY}px`;
-        b.classList.add('positioned');
-      }
-    });
-
-    document.querySelectorAll('.beam-layer').forEach(img => {
-      img.classList.add('positioned');
-    });
-
-    scaleAlarmingText();
-  }
-
-  // 1. Remove existing layers and bubbles first
-  wrap.querySelectorAll('.beam-layer, .sensor-bubble').forEach(el => el.remove());
-
-  // 2. Create beam layers
-  SENSOR_CONFIG.forEach(s => {
-    const img = document.createElement('img');
-    img.className = 'beam-layer';
-    img.src       = `beams/${s.beam}`;
-    img.dataset.id = s.id;
-    img.alt       = "";
-    wrap.appendChild(img);
-  });
-
-  // 3. Create new sensor bubbles
-  SENSOR_CONFIG.forEach(s => {
-    const div = document.createElement('div');
-    div.className    = 'sensor-bubble';
-    div.dataset.id   = s.id;
-    div.dataset.label= s.name;
-    div.title        = s.name;
-    div.innerHTML    = `<div class="bub-icon"></div>
-      <div class="sensor-warn" id="sensor-warn-${s.id}"></div>`;
-    div.addEventListener('click', () => toggleSensor(s.id));
-    wrap.appendChild(div);
-    const warnDiv = div.querySelector(`#sensor-warn-${s.id}`);
-    warnDiv.addEventListener('click', e => { e.stopPropagation(); showStaleDetail(s.id); });
-  });
-
-  _cacheElements();
-
-  // 4. Bind position measurements and load listeners AFTER elements are in the DOM
-  const base = document.getElementById('fp-base');
-  base.onload = () => { resize(); _cacheElements(); };
-  if (base.complete) { resize(); _cacheElements(); }
-
-  // Use window.onresize to cleanly overwrite previous listeners on rebuild
-  window.onresize = resize;
-}
-
-const _beamEls   = {};
-const _bubbleEls = {};
-const _warnEls   = {};
-function _cacheElements() {
-  SENSOR_CONFIG.forEach(s => {
-    _beamEls[s.id]   = document.querySelector(`.beam-layer[data-id="${s.id}"]`);
-    _bubbleEls[s.id] = document.querySelector(`.sensor-bubble[data-id="${s.id}"]`);
-    _warnEls[s.id]   = document.getElementById(`sensor-warn-${s.id}`);
-  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2026,10 +2033,11 @@ function buildSensorCards() {
     const active  = systemArmed && !st.disabled;
     const stale   = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
-    const rfCode = deviceConfig?.sensors?.[s.id]?.code;
-    const hasCode = rfCode !== undefined;
+    // Retrieve RF Code either from extracted configurations or parent object lookup
+    const rfCodes = s.codes || deviceConfig?.sensors?.[s.id]?.codes || (s.code ? [s.code] : (deviceConfig?.sensors?.[s.id]?.code ? [deviceConfig?.sensors?.[s.id]?.code] : null));
+    const hasCode = rfCodes && rfCodes.length > 0;
     const rfDisplay = hasCode
-      ? `0x${Number(rfCode).toString(16).toUpperCase()}`
+      ? rfCodes.map(code => `0x${Number(code).toString(16).toUpperCase()}`).join(', ')
       : '<span style="color:var(--red); font-weight:bold;">no sensor code learned for this entry</span>';
 
     const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
@@ -2046,7 +2054,8 @@ function buildSensorCards() {
         ID: ${s.id}<br>
         Beam: beams/${s.beam}<br>
         RF Code: ${rfDisplay}<br>
-        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleString()} ${timeAgo(st.last_seen)}` : ''}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
+        Last Seen: ${st.last_seen ? `${new Date(st.last_seen*1000).toLocaleString()} ${timeAgo(st.last_seen)}` : 'never'}<br>
+        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
       </div>
       <div class="sc-actions" data-role="actions">
         ${st.disabled
@@ -2174,25 +2183,13 @@ function selectConfigSection(el, section) {
   refreshConfigEditor();
 }
 
+// ─── MQTT state query ──────────────────────────────────────────────
 function requestConfig() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
   publish(`cmd/${did}/config/get`, makePayload(), 1);
   if (client?.connected) client.subscribe(`status/${did}/config`, { qos: 1 });
 }
-
-/*function refreshConfigEditor() {
-  const ta = document.getElementById('config-textarea');
-  if (!deviceConfig) { ta.value = '// Waiting for device config…\n// Click "Publish to device" after editing.'; return; }
-
-  let data;
-  if (configSection === 'full') {
-    data = deviceConfig;
-  } else {
-    data = deviceConfig[configSection] || {};
-  }
-  ta.value = JSON.stringify(data, null, 2);
-}*/
 
 function refreshConfigEditor() {
   const ta = document.getElementById('config-textarea');
@@ -2218,24 +2215,6 @@ function refreshConfigEditor() {
     }, 50);
   }
 }
-
-/*async function publishConfig() {
-  if (!credentials) { alert('Not connected'); return; }
-  const ta  = document.getElementById('config-textarea');
-  let parsed;
-  try { parsed = JSON.parse(ta.value); }
-  catch(e) { alert('Invalid JSON: ' + e.message); return; }
-
-  const did = credentials.device_id || 'diewesemoer';
-  const jsonStr = JSON.stringify(parsed);
-  const hashVal = await sha256(jsonStr);
-
-  if (configSection === 'full') {
-    publish(`cmd/${did}/config/set`, makePayload({ config: parsed, sha256: hashVal }), 1);
-  } else {
-    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed, sha256: hashVal }), 1);
-  }
-}*/
 
 async function publishConfig() {
   if (!credentials) { alert('Not connected'); return; }
@@ -2270,7 +2249,6 @@ function setAlarmState(state) {
   }
   setStatVal('s-state', state,
     state === 'DISARMED' ? 'green' :
-    state === 'ARMED'    ? 'amber' :
     state === 'ALARMING' ? 'red'   : 'pink');
 
   scaleAlarmingText();
@@ -2346,16 +2324,6 @@ function setStatVal(id, val, cls) {
   el.className   = 'stat-val' + (cls ? ' ' + cls : '');
 }
 
-function updateConnStatus(id, txt, cls) { setStatVal(id, txt, cls); }
-
-function setConnStatus(type, label) {
-  const dot   = document.getElementById('conn-dot');
-  const lbl   = document.getElementById('conn-label');
-  if (dot) dot.className = 'conn-dot ' + type;
-  if (lbl) lbl.textContent = label;
-  updateConnStatus('s-mqtt', label, type === 'ok' ? 'green' : type === 'err' ? 'red' : 'amber');
-}
-
 // ─── Dynamic Alarming text scaling ───────────────────────────────
 function scaleAlarmingText() {
   const label = document.querySelector('.fp-alarming-label');
@@ -2384,8 +2352,9 @@ function populateRfSensorDropdown() {
 
   SENSOR_CONFIG.forEach(s => {
     const remoteSensor = deviceConfig?.sensors?.[s.id];
-    const code = remoteSensor?.code;
-    if (!code) {
+    const codes = remoteSensor?.codes || (remoteSensor?.code ? [remoteSensor.code] : []);
+    const hasCode = codes && codes.length > 0;
+    if (!hasCode) {
       const opt = document.createElement('option');
       opt.value = s.id;
       opt.textContent = s.name;
@@ -2406,6 +2375,7 @@ function closeRfLearnModal() {
   document.getElementById('rf-learn-modal').style.display = 'none';
 }
 
+// ─── RF capture config toggles ────────────────────────────────────
 function onRfTargetTypeChange() {
   const type = document.getElementById('rf-target-type').value;
   document.getElementById('rf-sensor-select-container').style.display = type === 'sensor' ? 'block' : 'none';
@@ -2508,7 +2478,7 @@ function submitAddSensor() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  EVENTS LOG VIEW (Separate high-level Event Log)
+//  EVENTS LOG VIEW (Separate high-level Event Log with single-line scroll overflow)
 // ═══════════════════════════════════════════════════════════════════════════
 function requestEventsList() {
   if (!credentials) return;
@@ -2529,11 +2499,11 @@ function renderEventsList(entries) {
     container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">No events recorded. Click Fetch to retrieve.</div>';
     return;
   }
-  
+
   let prevTimeS = null;
   entries.forEach(entry => {
     const tVal = Number(entry.t || 0);
-    
+
     // Inject a visual spacer with computed duration gap if time between events exceeds 10 minutes (600 seconds)
     if (prevTimeS !== null) {
       const diffS = tVal - prevTimeS;
@@ -2549,7 +2519,7 @@ function renderEventsList(entries) {
           const d = Math.round(diffS / 86400);
           gapText = `${d} day${d === 1 ? '' : 's'}`;
         }
-        
+
         const spacer = document.createElement('div');
         spacer.style.display = 'flex';
         spacer.style.alignItems = 'center';
@@ -2560,7 +2530,7 @@ function renderEventsList(entries) {
         spacer.style.fontFamily = 'var(--mono)';
         spacer.style.textTransform = 'uppercase';
         spacer.style.letterSpacing = '0.1em';
-        
+
         spacer.innerHTML = `
           <div style="flex:1; height:1px; background:var(--border); margin-right:16px;"></div>
           <span>GAP: ${gapText} elapsed</span>
@@ -2588,24 +2558,30 @@ function renderEventsList(entries) {
       <span style="color:var(--text-muted); width:150px; flex-shrink:0;">${timeStr}</span>
       <span style="display:inline-block; width:24px; height:24px; text-align:center; line-height:24px; border-radius:50%; background:var(--bg3); flex-shrink:0;">${icon}</span>
       <span style="color:${typeBadgeColor}; font-weight:bold; width:120px; flex-shrink:0; text-transform:uppercase; font-size:10px;">${entry.type}</span>
-      <span style="color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(entry.msg)}">${escHtml(entry.msg)}</span>
+      <span style="color:var(--text); flex:1; min-width:0; overflow-x:auto; white-space:nowrap;" title="${escHtml(entry.msg)}">${escHtml(entry.msg)}</span>
     `;
     container.appendChild(row);
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  SD CARD LOG ACTIONS
-// ═══════════════════════════════════════════════════════════════════════════
+function updateConnStatus(id, txt, cls) { setStatVal(id, txt, cls); }
+
+function setConnStatus(type, label) {
+  const dot   = document.getElementById('conn-dot');
+  const lbl   = document.getElementById('conn-label');
+  if (dot) dot.className = 'conn-dot ' + type;
+  if (lbl) lbl.textContent = label;
+  updateConnStatus('s-mqtt', label, type === 'ok' ? 'green' : type === 'err' ? 'red' : 'amber');
+}
+
+// ─── SD Card Log Actions ───────────────────────────────────────────
 function requestSDLogs() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
   publish(`cmd/${did}/logs/get`, makePayload({ count: 200 }), 1);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  RAW LOG ACTIONS
-// ═══════════════════════════════════════════════════════════════════════════
+// ─── Raw Log Actions ──────────────────────────────────────────────
 const MAX_LOG = 400;
 
 function logRx(dir, topic, msg) {
