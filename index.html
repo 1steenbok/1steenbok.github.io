@@ -104,7 +104,7 @@ header {
 .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); transition: background .3s; }
 .conn-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .conn-dot.err { background: var(--red); }
-.conn-dot.pend { background: var(--amber); animation: blink .8s infinite; }
+.conn-dot.pend { background: var(--amber); animation: blink .8s infinite; will-change: opacity; transform: translateZ(0); }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
 .state-badge {
@@ -115,8 +115,8 @@ header {
 }
 .state-badge.DISARMED   { color: var(--green);  border-color: var(--green);  background: rgba(74,222,128,.08); }
 .state-badge.ARMED      { color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); }
-.state-badge.ENTRY_DELAY{ color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); animation: pulse-pink 1s infinite; }
-.state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,0.67); animation: pulse-red .6s infinite; }
+.state-badge.ENTRY_DELAY{ color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); animation: pulse-pink 1s infinite; will-change: box-shadow; transform: translateZ(0); }
+.state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,0.67); animation: pulse-red .6s infinite; will-change: box-shadow; transform: translateZ(0); }
 @keyframes pulse-pink   { 0%,100%{box-shadow:0 0 0 0 var(--pink-glow)} 50%{box-shadow:0 0 0 6px rgba(201,59,106,0)} }
 @keyframes pulse-red   { 0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)} 50%{box-shadow:0 0 0 8px rgba(248,113,113,0)} }
 
@@ -176,29 +176,30 @@ header {
   opacity: 1;
 }
 .fp-wrap .beam-layer.triggered.positioned {
-  filter: none;
-  opacity: 1;
-  animation: beam-flash .5s infinite;
+  filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3);
+  animation: beam-flash-opacity .6s infinite ease-in-out;
+  will-change: opacity;
 }
-@keyframes beam-flash {
-  0%,100% { filter: none; opacity: 1; }
-  50%      { filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3); opacity: .85; }
+@keyframes beam-flash-opacity {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
 }
 
 /* Alarming overlay — red pulsing border around the whole floor plan */
 .fp-wrap::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  border: 3px solid transparent; border-radius: 2px;
-  transition: border-color .3s;
+  border: 3px solid var(--red); border-radius: 2px;
+  opacity: 0;
+  transition: opacity .3s;
   z-index: 30;
 }
 .fp-wrap.alarming::after {
-  border-color: var(--red);
-  animation: fp-alarm-border .55s infinite;
+  animation: fp-alarm-border-composited .8s infinite ease-in-out;
+  will-change: opacity;
 }
-@keyframes fp-alarm-border {
-  0%,100% { box-shadow: inset 0 0 0 0 rgba(184,50,50,0),   0 0 0 0 rgba(184,50,50,0); }
-  50%     { box-shadow: inset 0 0 24px 4px rgba(184,50,50,.35), 0 0 18px 4px rgba(184,50,50,.25); }
+@keyframes fp-alarm-border-composited {
+  0%, 100% { opacity: 0.15; }
+  50%      { opacity: 0.85; }
 }
 /* "Alarming" label top-left of floor plan */
 .fp-alarming-label {
@@ -313,13 +314,22 @@ header {
 .sensor-bubble.armed .bub-icon { opacity: 1; }
 .sensor-bubble.triggered {
   background: var(--red); border-color: #FF4444;
-  box-shadow: 0 0 0 0 rgba(184,50,50,.6);
-  animation: bub-trigger .5s infinite;
+  position: relative;
+}
+.sensor-bubble.triggered::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: bubble-ring-pulse .8s infinite ease-out;
+  will-change: transform, opacity;
 }
 .sensor-bubble.triggered .bub-icon { opacity: 1; }
-@keyframes bub-trigger {
-  0%,100% { box-shadow: 0 0 0 0 rgba(184,50,50,.7); }
-  50%     { box-shadow: 0 0 0 8px rgba(184,50,50,0); }
+@keyframes bubble-ring-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
 .sensor-bubble.disabled {
   background: var(--bg3); border-color: var(--text-muted);
@@ -374,7 +384,17 @@ header {
 .sensor-row:hover { opacity: .8; }
 .s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: all .2s; }
 .s-dot.armed     { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
-.s-dot.triggered { background: var(--red);  box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
+.s-dot.triggered { background: var(--red); position: relative; }
+.s-dot.triggered::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: bubble-ring-pulse .8s infinite ease-out;
+  will-change: transform, opacity;
+}
 .s-dot.disarmed  { background: var(--text-muted); }
 .s-dot.disabled  { background: var(--text-muted); opacity: .4; }
 .s-name { font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex: 1; }
@@ -412,7 +432,17 @@ header {
 .sc-dot.armed    { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
 .sc-dot.disarmed { background: var(--text-muted); }
 .sc-dot.disabled { background: var(--text-muted); opacity:.4; }
-.sc-dot.triggered { background: var(--red); box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
+.sc-dot.triggered { background: var(--red); position: relative; }
+.sc-dot.triggered::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: bubble-ring-pulse .8s infinite ease-out;
+  will-change: transform, opacity;
+}
 .sc-name { font-size: 13px; font-weight: 600; flex: 1; }
 .sc-badge {
   font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px;
@@ -731,9 +761,10 @@ header {
   pointer-events: auto; background: var(--bg2); border-left: 4px solid var(--pink);
   border-radius: 4px; padding: 10px 14px; box-shadow: 0 4px 12px rgba(0,0,0,.25);
   display: flex; gap: 10px; align-items: flex-start;
-  transform: translateX(110%); opacity: 0;
+  transform: translateX(110%) translateZ(0); opacity: 0;
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
   position: relative;
+  will-change: transform, opacity;
 }
 .action-notif.show { transform: translateX(0); opacity: 1; }
 .action-notif.collapsed-state { transform: translateX(-120%); opacity: 0; pointer-events: none; }
