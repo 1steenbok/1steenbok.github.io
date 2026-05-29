@@ -15,6 +15,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- Prism Syntax Highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" id="prism-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" id="prism-dark">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
 <style>
 /* ─── Design tokens — light (default) ───────────────────────────── */
 :root {
@@ -28,8 +33,8 @@
   --border:      rgba(0,0,0,.10);
   --border-hi:   rgba(201,59,106,.38);
   --text:        #1A1916;
-  --text-dim:    #524F48;
-  --text-muted:  #A8A59C;
+  --text-dim:    #3B3A36;
+  --text-muted:  #706E66;
   --green:       #1A7A43;
   --amber:       #A0530A;
   --red:         #B83232;
@@ -50,8 +55,8 @@
   --border:      rgba(255,255,255,.07);
   --border-hi:   rgba(232,99,138,.4);
   --text:        #E8E6E0;
-  --text-dim:    #7A7870;
-  --text-muted:  #3C3A38;
+  --text-dim:    #BAB8B0;
+  --text-muted:  #807E78;
   --green:       #4ADE80;
   --amber:       #FBBF24;
   --red:         #F87171;
@@ -136,7 +141,7 @@ header {
 .panel.active { display: flex; }
 
 /* ─── STATUS TAB ─────────────────────────────────────────────────── */
-#panel-status { flex-direction: row; gap: 0; overflow: hidden; }
+#panel-status { flex-direction: row; gap: 0; overflow: hidden; position: relative; }
 
 /* Floorplan column */
 .floorplan-col {
@@ -145,7 +150,6 @@ header {
 }
 .fp-wrap {
   position: relative; user-select: none;
-  /* size set by JS to fit container maintaining aspect ratio */
 }
 .fp-wrap img.base {
   display: block; width: 100%; height: 100%;
@@ -160,16 +164,18 @@ header {
 .fp-wrap .beam-layer {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: contain; pointer-events: none;
-  opacity: var(--beam-inactive-alpha, 0.35);
+  opacity: 0;
   filter: grayscale(100%) brightness(0.55);
   transition: filter .45s ease, opacity .45s ease;
 }
-.fp-wrap .beam-layer.armed {
+.fp-wrap .beam-layer.positioned {
+  opacity: var(--beam-inactive-alpha, 0.35);
+}
+.fp-wrap .beam-layer.armed.positioned {
   filter: none;
   opacity: 1;
 }
-/* Triggered: red flash on the beam image */
-.fp-wrap .beam-layer.triggered {
+.fp-wrap .beam-layer.triggered.positioned {
   filter: none;
   opacity: 1;
   animation: beam-flash .5s infinite;
@@ -196,12 +202,12 @@ header {
 }
 /* "Alarming" label top-left of floor plan */
 .fp-alarming-label {
-  position: absolute; top: 10px; left: 10px; z-index: 31;
+  position: absolute; top: 15%; left: 50%; transform: translateX(-50%); z-index: 31;
   font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: 0.67em; text-transform: uppercase;
+  letter-spacing: 0.3em; text-transform: uppercase;
   color: var(--red); background: rgba(184,50,50,0.67);
   border: 1px solid var(--red); border-radius: 4px;
-  padding: 3px 10px;
+  padding: 8px 16px; text-align: center;
   animation: label-pulse .55s infinite;
   display: none;
 }
@@ -278,7 +284,6 @@ header {
 }
 
 /* ─── Dev test toolbar ───────────────────────────────────────────── */
-/* REMOVE THIS ENTIRE BLOCK when no longer needed */
 #dev-toolbar {
   position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
   z-index: 200;
@@ -313,6 +318,11 @@ header {
   cursor: pointer; transition: all .25s;
   display: flex; align-items: center; justify-content: center;
   z-index: 10;
+  opacity: 0;
+  transition: opacity .3s, background .25s, border-color .25s, box-shadow .25s;
+}
+.sensor-bubble.positioned {
+  opacity: 1;
 }
 .sensor-bubble::after {
   content: attr(data-label);
@@ -507,6 +517,18 @@ header {
 .log-topic { color: var(--text-dim); flex-shrink: 0; min-width: 220px; }
 .log-msg   { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Prism JSON override styling */
+.log-msg pre {
+  background: transparent !important; margin: 0 !important; padding: 0 !important;
+  font-size: 10px !important; font-family: var(--mono) !important;
+  white-space: pre-wrap !important; word-break: break-all !important;
+  display: inline;
+}
+.log-msg code {
+  background: transparent !important; padding: 0 !important;
+  font-family: var(--mono) !important;
+}
+
 /* ─── Setup / credentials overlay ────────────────────────────────── */
 #setup-overlay {
   position: fixed; inset: 0; z-index: 100;
@@ -565,12 +587,12 @@ header {
 .modal-row button:hover { border-color: var(--pink); color: var(--pink); }
 .modal-row button.danger { border-color: var(--red); color: var(--red); }
 .modal-row button.danger:hover { background: rgba(248,113,113,0.67); }
-/* ─── Responsive — mobile: sidebar moves to bottom ───────────────── */
-@media (max-width: 768px) {
-  html, body { height: auto; overflow: auto; }
-  #app { height: auto; min-height: 100dvh; overflow: visible; }
 
-  /* Fix: connection pill / server URL overflow on narrow screens */
+/* ─── Responsive — mobile: 90% width scaling ───────── */
+@media (max-width: 768px) {
+  html, body { height: 100%; overflow: hidden; }
+  #app { height: 100dvh; overflow: hidden; }
+
   .conn-pill {
     max-width: 130px; overflow: hidden;
   }
@@ -582,40 +604,38 @@ header {
   .logo { font-size: 12px; }
   .state-badge { font-size: 9px; padding: 2px 8px; flex-shrink: 0; }
 
-  /* Setup card: prevent overflow on narrow screens */
   .setup-card { padding: 24px 20px; }
-  input, textarea, select { font-size: 16px; } /* prevent iOS zoom */
+  input, textarea, select { font-size: 16px; }
 
   .tab-bar { overflow-x: auto; flex-wrap: nowrap; padding: 6px 12px 0; gap: 1px; }
   .tab { padding: 5px 11px 7px; font-size: 10px; white-space: nowrap; }
 
-  /* Status panel: floorplan on top, sidebar below */
+  /* Stack vertically but expand floorplan area to occupy 90% width of mobile screens */
   #panel-status {
     flex-direction: column !important;
-    overflow: visible !important;
-    height: auto !important;
-    flex: none !important;
+    overflow-y: auto !important;
+    height: calc(100vh - 84px) !important;
+    align-items: center;
   }
   .floorplan-col {
+    width: 90% !important; /* Mathematically expanded to take 90% width on smaller viewports */
+    height: auto !important;
+    min-height: 250px !important;
     flex: none !important;
-    width: 100% !important;
-    height: 62vw !important;
-    min-height: 220px !important;
-    max-height: 52vh !important;
+    margin: 12px auto !important;
     border-bottom: 1px solid var(--border);
   }
   .ctrl-col {
-    width: 100% !important; flex: none !important;
-    border-left: none !important;
-    border-top: 1px solid var(--border);
+    width: 100% !important;
+    height: auto !important;
     overflow-y: visible !important;
-    max-height: none !important;
+    border-top: 1px solid var(--border);
   }
+
   .ctrl-section { padding: 12px; }
   .arm-row { gap: 6px; }
   .btn-arm, .btn-disarm { padding: 8px 0; font-size: 10px; }
 
-  /* Config panel: nav becomes scrollable row on top */
   #panel-config { flex-direction: column !important; overflow: visible !important; height: auto !important; flex: none !important; }
   .config-left {
     width: 100% !important; border-right: none !important;
@@ -632,14 +652,10 @@ header {
   .config-right { overflow: visible !important; flex: none; padding: 12px; }
   #config-textarea { min-height: 200px; height: 40vh; }
 
-  /* Sensors tab */
   #panel-sensors { overflow-y: auto; height: auto; flex: none; padding: 16px; }
-
-  /* Log tab */
   #panel-log { height: auto; flex: none; }
   .log-body { max-height: calc(100dvh - 160px); }
 
-  /* Dev toolbar — keep it above content on mobile */
   #dev-toolbar {
     bottom: auto; top: 52px;
     font-size: 9px; padding: 4px 10px;
@@ -647,8 +663,22 @@ header {
     overflow-x: auto;
   }
 
-  /* Warn bubbles: ensure they don't overflow off-screen */
   .sensor-warn { max-width: 130px; font-size: 8px; padding: 4px 7px; }
+
+  #sos-btn {
+    position: absolute !important;
+    top: 12px !important;
+    left: 12px !important;
+    width: 10% !important;
+    aspect-ratio: 1 !important;
+    z-index: 250 !important;
+  }
+  #sos-confirm-box {
+    position: absolute !important;
+    top: 12px !important;
+    left: calc(10% + 20px) !important;
+    z-index: 250 !important;
+  }
 }
 
 /* ─── Stale sensor detail modal ──────────────────────────────────── */
@@ -688,51 +718,136 @@ header {
   background: transparent; color: var(--text-dim); transition: all .15s;
 }
 .stale-detail-card button:hover { border-color: var(--pink); color: var(--pink); }
+
+/* ─── Offline Warning Pop-up (40% width, blur backdrop, themed) ─── */
+#offline-warning {
+  display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 40%; background: var(--bg2); backdrop-filter: blur(4px); opacity: 0.95; border: 2px solid var(--amber);
+  border-radius: 12px; padding: 16px; text-align: center; z-index: 100;
+  box-shadow: 0 8px 32px rgba(0,0,0,.3); pointer-events: auto;
+}
+
+/* ─── SOS Button layout styles ───────────────────────────────────── */
+#sos-btn {
+  position: absolute; top: 12px; left: 12px; width: 7%; aspect-ratio: 1;
+  cursor: pointer; z-index: 35; transition: opacity 0.3s;
+}
+#sos-btn img {
+  width: 100%; height: 100%; object-fit: contain; border-radius: 50%;
+}
+@keyframes sos-pending-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.8); }
+  50% { box-shadow: 0 0 0 10px rgba(249,115,22,0); }
+}
+
+/* ─── Action Notification Panel Feed (invisible, clickthrough) ────── */
+#action-notifications-container {
+  position: absolute; left: 12px; top: calc(7% + 24px); width: 320px;
+  pointer-events: none; z-index: 150; display: flex; flex-direction: column;
+  justify-content: flex-start; overflow: hidden; max-height: 80%;
+}
+#action-notifications-queue {
+  display: flex; flex-direction: column; gap: 8px; max-height: 100%;
+  overflow-y: auto; pointer-events: none; padding-right: 4px;
+}
+.action-notif {
+  pointer-events: auto; background: var(--bg2); border-left: 4px solid var(--pink);
+  border-radius: 4px; padding: 10px 14px; box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  display: flex; gap: 10px; align-items: flex-start;
+  transform: translateX(110%); opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+  position: relative;
+}
+.action-notif.show { transform: translateX(0); opacity: 1; }
+.action-notif.collapsed-state { transform: translateX(-120%); opacity: 0; pointer-events: none; }
+.action-notif-icon { font-size: 14px; margin-top: 2px; flex-shrink: 0; }
+.action-notif-body { flex: 1; min-width: 0; }
+.action-notif-msg { font-family: var(--mono); font-size: 10px; color: var(--text); line-height: 1.4; word-break: break-word; }
+.action-notif-ts { font-family: var(--mono); font-size: 8px; color: var(--text-muted); margin-top: 2px; }
+.action-notif-close {
+  position: absolute; top: 4px; right: 6px; font-size: 10px;
+  color: var(--text-muted); cursor: pointer; border: none; background: transparent;
+}
+.action-notif-toggle-arrow {
+  position: absolute; top: 4px; right: 20px; font-size: 10px;
+  color: var(--text-muted); cursor: pointer; border: none; background: transparent;
+}
+#action-notifications-restore-btn {
+  position: absolute; left: 0; bottom: 10px; width: 24px; height: 24px;
+  background: var(--pink); color: #000; display: none; align-items: center;
+  justify-content: center; border-radius: 0 var(--radius) var(--radius) 0;
+  cursor: pointer; pointer-events: auto; z-index: 151; box-shadow: -2px 2px 8px rgba(0,0,0,.2);
+  font-size: 10px;
+}
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════════
-     CONFIGURATION — edit these to match your layout
-     x/y are native pixel coordinates of SteenbokLayout.png
-     ═══════════════════════════════════════════════════════════════════ -->
 <script>
 // ─────────────────────────────────────────────────────────────────────
 //  DISPLAY CONFIG
-//  INACTIVE_BEAM_ALPHA: opacity of greyscale beams when system not armed
-//  Range 0.0 (invisible) – 1.0 (full opacity).
 // ─────────────────────────────────────────────────────────────────────
 const INACTIVE_BEAM_ALPHA = 0.35;
-
-// ─────────────────────────────────────────────────────────────────────
-//  BUBBLE SIZE SCALE
-//  Multiplier applied on top of the proportional scaling.
-//  1.0 = default (28px at full native resolution, scales down with floorplan)
-//  1.5 = 50% larger, 0.7 = 30% smaller, etc.
-// ─────────────────────────────────────────────────────────────────────
 const BUBBLE_SIZE_SCALE = 0.7;
-//  Sensors not seen within this many seconds get a warning badge.
-//  Default: 3 days (259200 s). Change to taste.
-// ─────────────────────────────────────────────────────────────────────
 const STALE_SENSOR_THRESHOLD_S = 259200;  // 3 days
-//  id:      matches config.sensors key on the Pico
-//  name:    display name
-//  beam:    ./beams/beamN.png filename (shown when armed)
-//  x, y:    bubble position in NATIVE pixels of SteenbokLayout.png
-//           (measure in any image editor — top-left is 0,0)
-//  zone:    metadata only
-// ─────────────────────────────────────────────────────────────────────
-const SENSOR_CONFIG = [
-  { id: "pir_fire_pit",            name: "Fire Pit",        beam: "beam1.png",  x: 663, y: 179, zone: "complex"   },
-  { id: "pir_main_geyser",         name: "Stoep Geyser",    beam: "beam2.png",  x: 455, y: 221, zone: "complex"   },
-  { id: "pir_main_stoep",          name: "Stoep Door",      beam: "beam3.png",  x: 556, y: 298, zone: "fire_pit"  },
-  { id: "pir_container_stoep",     name: "Container Stoep", beam: "beam4.png",  x: 433, y: 311, zone: "fire_pit"  },
-  { id: "pir_container_fence",     name: "Container Fence", beam: "beam5.png",  x: 288, y: 312, zone: "building"  },
-  { id: "pir_main_hallway",        name: "Outdoor Hallway", beam: "beam6.png",  x: 450, y: 288, zone: "building"  },
-  { id: "pir_container_power",     name: "Container Power", beam: "beam7.png",  x: 394, y: 420, zone: "perimeter" },
-  { id: "pir_front_windows",       name: "Front Windows",   beam: "beam8.png",  x: 512, y: 381, zone: "perimeter" },
-  { id: "pir_main_power",          name: "Main Power",      beam: "beam9.png",  x: 667, y: 271, zone: "perimeter" },
-];
+
+let SENSOR_CONFIG = [];
+const SENSOR_LOCATIONS = {
+  "pir_fire_pit":            { x: 663, y: 179 },
+  "pir_main_geyser":         { x: 455, y: 221 },
+  "pir_main_stoep":          { x: 556, y: 298 },
+  "pir_container_stoep":     { x: 433, y: 311 },
+  "pir_container_fence":     { x: 288, y: 312 },
+  "pir_main_hallway":        { x: 450, y: 288 },
+  "pir_container_power":     { x: 394, y: 420 },
+  "pir_front_windows":       { x: 512, y: 381 },
+  "pir_main_power":          { x: 667, y: 271 },
+};
+
+function initSensorConfigDefaults() {
+  SENSOR_CONFIG = Object.keys(SENSOR_LOCATIONS).map((id, index) => {
+    return {
+      id: id,
+      name: id.replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase()),
+      beam: `beam${index + 1}.png`,
+      x: SENSOR_LOCATIONS[id].x,
+      y: SENSOR_LOCATIONS[id].y,
+      zone: 'perimeter'
+    };
+  });
+}
+initSensorConfigDefaults();
+
+function updateSensorConfigFromDevice() {
+  if (!deviceConfig || !deviceConfig.sensors) return;
+  SENSOR_CONFIG.length = 0;
+  const typeCounters = {};
+
+  Object.keys(deviceConfig.sensors).forEach(id => {
+    const s = deviceConfig.sensors[id];
+    const loc = SENSOR_LOCATIONS[id] || { x: 100, y: 100 };
+
+    let type = s.type || 'pir';
+    if (s.interface === 'wireless') {
+      type = 'wireless';
+    }
+    if (!typeCounters[type]) typeCounters[type] = 0;
+    typeCounters[type]++;
+    const beam = `${type}${typeCounters[type]}.png`;
+
+    SENSOR_CONFIG.push({
+      id: id,
+      name: s.name || id,
+      beam: beam,
+      x: loc.x,
+      y: loc.y,
+      zone: s.zone || 'perimeter'
+    });
+  });
+
+  buildFloorplan();
+  buildSidebarSensors(true);
+}
 </script>
 
 <!-- Setup overlay -->
@@ -809,6 +924,57 @@ const SENSOR_CONFIG = [
   </div>
 </div>
 
+<!-- RF Learn Modal -->
+<div id="rf-learn-modal" style="position:fixed; inset:0; z-index:70; background:rgba(10,10,12,.8); display:none; align-items:center; justify-content:center;">
+  <div class="modal-card" style="width:340px;">
+    <h3>RF Code Learner</h3>
+    <p>Select target and click Start to begin learning.</p>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Target Type</label>
+      <select id="rf-target-type" onchange="onRfTargetTypeChange()" style="width:100%;">
+        <option value="sensor">Sensor</option>
+        <option value="remote">Remote Control</option>
+      </select>
+    </div>
+
+    <div id="rf-sensor-select-container" style="margin-bottom:12px;">
+      <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Select Sensor</label>
+      <select id="rf-sensor-select" style="width:100%;"></select>
+    </div>
+
+    <div id="rf-remote-container" style="margin-bottom:12px; display:none;">
+      <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Remote Number</label>
+      <select id="rf-remote-id" style="width:100%;">
+        <option value="remote1">Remote 1</option>
+        <option value="remote2">Remote 2</option>
+        <option value="remote3">Remote 3</option>
+        <option value="remote4">Remote 4</option>
+      </select>
+      <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px; margin-top:8px;">Command</label>
+      <select id="rf-remote-cmd" style="width:100%;">
+        <option value="arm_toggle">Arm Toggle</option>
+        <option value="arm">Arm</option>
+        <option value="disarm">Disarm</option>
+        <option value="sos">SOS / Alarm</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Manual Code Entry (Optional)</label>
+      <input id="rf-manual-code" placeholder="Hex e.g. 0x123456 or decimal" type="text" style="width:100%;">
+    </div>
+
+    <div id="rf-learn-status" style="font-family:var(--mono); font-size:10px; color:var(--amber); text-align:center; min-height:18px; margin-bottom:14px;">Stopped</div>
+
+    <div class="modal-row">
+      <button onclick="closeRfLearnModal()">Cancel</button>
+      <button id="btn-rf-learn-toggle" class="danger" onclick="toggleRfLearnState()" style="background:var(--pink-soft); color:var(--pink);">Start Learn</button>
+      <button onclick="assignRfCode()" style="background:var(--green); color:#fff;">Assign</button>
+    </div>
+  </div>
+</div>
+
 <!-- Main app shell -->
 <div id="app">
   <header>
@@ -825,6 +991,7 @@ const SENSOR_CONFIG = [
     <button class="tab active" onclick="switchTab('status')">Status</button>
     <button class="tab" onclick="switchTab('sensors')">Sensors</button>
     <button class="tab" onclick="switchTab('config')">Config</button>
+    <button class="tab" onclick="switchTab('events')">Events</button>
     <button class="tab" onclick="switchTab('log')">Log</button>
     <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
   </div>
@@ -835,8 +1002,35 @@ const SENSOR_CONFIG = [
       <div class="fp-wrap" id="fp-wrap">
         <img class="base" src="SteenbokLayout.png" alt="Steenbok layout" id="fp-base">
         <div class="fp-alarming-label">⚠ Alarming</div>
-        <!-- beam layers injected by JS -->
-        <!-- sensor bubbles injected by JS -->
+
+        <!-- SOS Trigger Button -->
+        <div id="sos-btn" onclick="triggerSOS()">
+          <img src="icons/SOS.png" alt="SOS" id="sos-img">
+        </div>
+
+        <!-- SOS Multi-Tap Confirmation Box -->
+        <div id="sos-confirm-box" style="display:none; position:absolute; left:calc(7% + 20px); top:12px; background:rgba(184,50,50,0.9); border:1px solid var(--red); border-radius:6px; padding:6px 12px; font-family:var(--mono); font-size:11px; color:#fff; z-index:36; white-space:nowrap; pointer-events:none;">
+          Tap <span id="sos-tap-count">2</span> more times to confirm (<span id="sos-time-count">10</span>s)
+        </div>
+
+        <!-- Manual SOS Title Infobox -->
+        <div id="sos-infobox" style="display:none; position:absolute; top:10px; right:10px; background:rgba(184,50,50,0.85); border:1px solid var(--red); border-radius:4px; padding:4px 8px; font-family:var(--mono); font-size:10px; color:#fff; z-index:36; animation:pulse-red 1s infinite;">
+          Manual SOS Triggered
+        </div>
+
+        <!-- Action Notification feed overlay (nested directly inside fp-wrap below SOS) -->
+        <div id="action-notifications-container">
+          <div id="action-notifications-restore-btn" onclick="toggleNotificationsCollapse(false)">▶</div>
+          <div id="action-notifications-queue"></div>
+        </div>
+
+        <!-- Offline pop-up center screen (40% width, styled) -->
+        <div id="offline-warning">
+          <div style="font-size:32px; color:var(--amber); margin-bottom:8px;">⚠️</div>
+          <div style="font-size:12px; font-weight:bold; margin-bottom:6px; font-family:var(--mono);">OFFLINE WARNING</div>
+          <div style="font-size:10px; font-family:var(--mono); line-height:1.4; margin-bottom:12px; color:var(--text-dim);">Device heartbeat has stopped (over 1 hour). It appears offline. Verify by SMSing "status".</div>
+          <button onclick="dismissOfflineWarning()" style="font-family:var(--mono); font-size:9px; padding:4px 10px; border-radius:4px; background:var(--amber); color:#000; border:none; cursor:pointer;">Dismiss</button>
+        </div>
       </div>
     </div>
 
@@ -860,6 +1054,7 @@ const SENSOR_CONFIG = [
         <div class="stat-row"><span class="stat-label">Source</span>     <span class="stat-val" id="s-source">—</span></div>
         <div class="stat-row"><span class="stat-label">Power</span>      <span class="stat-val" id="s-power">—</span></div>
         <div class="stat-row"><span class="stat-label">MQTT</span>       <span class="stat-val" id="s-mqtt">—</span></div>
+        <div class="stat-row"><span class="stat-label">SD Free</span>    <span class="stat-val" id="s-sdfree">—</span></div>
         <div class="stat-row"><span class="stat-label">Uptime</span>     <span class="stat-val" id="s-uptime">—</span></div>
         <div class="stat-row"><span class="stat-label">RAM free</span>   <span class="stat-val" id="s-ram">—</span></div>
         <div class="stat-row"><span class="stat-label">Last seen</span>  <span class="stat-val" id="s-lastseen">—</span></div>
@@ -880,9 +1075,40 @@ const SENSOR_CONFIG = [
       <div style="display:flex;gap:8px">
         <button class="sc-btn primary" onclick="sendArmAll()">Arm All</button>
         <button class="sc-btn" onclick="sendDisarmAll()">Disarm All</button>
+        <button class="sc-btn" onclick="openRfLearnModal()">RF Learn</button>
+        <button class="sc-btn" onclick="toggleAddSensorForm()">Add Sensor</button>
       </div>
     </div>
+
+    <!-- Add Sensor Form -->
+    <div id="add-sensor-form" style="display:none; background:var(--bg3); border-radius:8px; padding:12px; margin-bottom:16px; max-width: 400px;">
+      <h4 style="font-family:var(--mono); font-size:11px; margin-bottom:8px;">Add New Sensor</h4>
+      <div style="margin-bottom:8px;">
+        <label style="font-family:var(--mono); font-size:9px;">Sensor ID (unique)</label>
+        <input id="add-s-id" placeholder="e.g. pir_kitchen" type="text">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="font-family:var(--mono); font-size:9px;">Name</label>
+        <input id="add-s-name" placeholder="e.g. Kitchen PIR" type="text">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="font-family:var(--mono); font-size:9px;">Beam Image</label>
+        <input id="add-s-beam" placeholder="e.g. beam10.png" type="text">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="font-family:var(--mono); font-size:9px;">Zone</label>
+        <input id="add-s-zone" placeholder="e.g. perimeter" type="text">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="sc-btn" onclick="toggleAddSensorForm()">Cancel</button>
+        <button class="sc-btn primary" onclick="submitAddSensor()">Save</button>
+      </div>
+    </div>
+
     <div class="sensor-cards" id="sensor-cards"></div>
+
+    <h2 style="font-size:16px;font-weight:800;margin-top:24px;margin-bottom:12px;">Remotes</h2>
+    <div class="sensor-cards" id="remote-cards"></div>
   </div>
 
   <!-- CONFIG -->
@@ -902,13 +1128,25 @@ const SENSOR_CONFIG = [
         <h2 id="config-section-title">Full config</h2>
         <button class="config-save-btn" onclick="publishConfig()">Publish to device ↑</button>
       </div>
-      <textarea id="config-textarea" spellcheck="false" placeholder="Loading…"></textarea>
+      <pre style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; margin:0; padding:14px;"><code id="config-textarea" class="language-json" contenteditable="true" spellcheck="false" style="display:block; outline:none; font-size:11px; line-height:1.7; font-family:var(--mono); min-height:100%;">Loading…</code></pre>
       <p class="config-help">
-        Edits are published via MQTT cmd/{device_id}/config/set · 
-        The device writes to flash + syncs to SD · 
+        Edits are published via MQTT cmd/{device_id}/config/set ·
+        The device writes to flash + syncs to SD ·
         Changes marked with <span style="color:var(--pink)">⚠</span> require a reboot to take effect.
       </p>
     </div>
+  </div>
+
+  <!-- EVENTS (Separate Events Log view) -->
+  <div class="panel" id="panel-events" style="flex-direction: column; padding: 20px; overflow-y: auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
+      <h2 style="font-size:16px;font-weight:800">System Events Log</h2>
+      <div style="display:flex;gap:8px">
+        <button class="sc-btn primary" onclick="requestEventsList()">Fetch Events List</button>
+        <button class="sc-btn" onclick="clearEventsList()">Clear Events View</button>
+      </div>
+    </div>
+    <div class="log-body" id="events-log-body" style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:10px; max-height:calc(100vh - 180px); overflow-y:auto;"></div>
   </div>
 
   <!-- LOG -->
@@ -919,6 +1157,7 @@ const SENSOR_CONFIG = [
       <label style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--text-muted);cursor:pointer">
         <input type="checkbox" id="log-autoscroll" checked> autoscroll
       </label>
+      <button class="log-clear" onclick="requestSDLogs()">Fetch SD Logs</button>
       <button class="log-clear" onclick="clearLog()">Clear</button>
     </div>
     <div class="log-body" id="log-body"></div>
@@ -941,6 +1180,58 @@ let armPending   = false;  // waiting for MQTT to confirm ARM
 let disarmPending = false; // waiting for MQTT to confirm DISARM
 let armPendingTimer = null;
 let disarmPendingTimer = null;
+
+// New state tracking
+let lastSource = "";
+let offlineWarningDismissed = false;
+let lastHeartbeatTimeS = null;
+let notificationsCollapsed = false;
+let activeActionNotifications = [];
+let alarmTextRatioCache = null;
+
+let sosPending = false;
+let sosTimeout = null;
+let rfLearning = false;
+
+// SHA256 helper for config integrity checks
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+// ─── Relative time formatter ──────────────────────────────────────
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60) return '(just now)';
+  const mins = Math.floor(diff / 60);
+  if (mins < 60) return `(${mins} min${mins === 1 ? '' : 's'} ago)`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `(${hours} hour${hours === 1 ? '' : 's'} ago)`;
+  const days = Math.floor(hours / 24);
+  return `(${days} day${days === 1 ? '' : 's'} ago)`;
+}
+
+// ─── Offline monitoring ───────────────────────────────────────────
+function checkOfflineStatus() {
+  if (offlineWarningDismissed) return;
+  const nowS = Math.floor(Date.now() / 1000);
+  const popup = document.getElementById('offline-warning');
+  if (lastHeartbeatTimeS && (nowS - lastHeartbeatTimeS > 3600)) {
+    if (popup) popup.style.display = 'block';
+  } else {
+    if (popup) popup.style.display = 'none';
+  }
+}
+
+function dismissOfflineWarning() {
+  offlineWarningDismissed = true;
+  const popup = document.getElementById('offline-warning');
+  if (popup) popup.style.display = 'none';
+}
 
 // Credential persistence (cookies, 1-year expiry)
 function saveCreds(c) {
@@ -971,6 +1262,14 @@ function applyTheme(t) {
   document.documentElement.dataset.theme = t === 'dark' ? 'dark' : '';
   const btn = document.getElementById('theme-toggle');
   if (btn) btn.textContent = t === 'dark' ? '☾' : '☀︎';
+
+  // Toggle Prism highlight themes
+  const l = document.getElementById('prism-light');
+  const d = document.getElementById('prism-dark');
+  if (l && d) {
+    l.disabled = (t === 'dark');
+    d.disabled = (t === 'light');
+  }
 }
 function toggleTheme() {
   const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -985,14 +1284,13 @@ function toggleTheme() {
 window.addEventListener('DOMContentLoaded', () => {
   applyTheme(loadThemePref());   // apply before first paint
 
-  // Apply configurable inactive beam alpha
   document.documentElement.style.setProperty('--beam-inactive-alpha', INACTIVE_BEAM_ALPHA);
 
   buildFloorplan();
   buildSensorCards();
   buildSidebarSensors();
+  buildRemoteCards();
 
-  // Populate dev sensor select
   const sel = document.getElementById('dev-sensor-select');
   if (sel) {
     SENSOR_CONFIG.forEach(s => {
@@ -1007,7 +1305,8 @@ window.addEventListener('DOMContentLoaded', () => {
     hideSetup();
     connect();
   }
-  // else overlay stays visible
+
+  setInterval(checkOfflineStatus, 5000);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1016,7 +1315,6 @@ window.addEventListener('DOMContentLoaded', () => {
 function hideSetup() { document.getElementById('setup-overlay').style.display = 'none'; }
 function showSetup() { document.getElementById('setup-overlay').style.display = 'flex'; }
 
-// File drop
 const dropArea = document.getElementById('cred-drop');
 dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag'); });
 dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag'));
@@ -1074,18 +1372,18 @@ function showSetupError(msg) {
   el.textContent = msg; el.style.display = 'block';
 }
 
-// Called from credentials tab
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const panels = ['status','sensors','config','log','setup'];
+    const panels = ['status','sensors','config','events','log','setup'];
     t.classList.toggle('active', panels[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if (name === 'setup') { showSetup(); return; }
   const p = document.getElementById('panel-' + name);
   if (p) p.classList.add('active');
-  if (name === 'sensors') buildSensorCards();
+  if (name === 'sensors') { buildSensorCards(); buildRemoteCards(); }
   if (name === 'config')  requestConfig();
+  if (name === 'events')  requestEventsList();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1112,14 +1410,14 @@ function connect() {
     sysLog(`Connected to ${broker}`);
 
     const did = device_id;
-    // Subscribe to all status topics — QOS 1 for reliability
     client.subscribe(`status/${did}/#`,     { qos: 1 });
-    // Retained state topics
+    client.subscribe(`alarm/${did}/#`,      { qos: 1 });
     client.subscribe(`status/${did}/armed`, { qos: 1 });
     client.subscribe(`status/${did}/zones`, { qos: 1 });
-    // Heartbeat
+    client.subscribe(`status/${did}/actions`, { qos: 1 });
+    client.subscribe(`status/${did}/events`, { qos: 1 });
     client.subscribe(`status/${did}/heartbeat`, { qos: 0 });
-    logRx('sys', 'subscribed', `status/${did}/#`);
+    logRx('sys', 'subscribed', `status/${did}/# and alarm/${did}/#`);
   });
 
   client.on('message', (topic, payload) => {
@@ -1162,15 +1460,67 @@ function handleMessage(topic, raw) {
 
   const did = credentials?.device_id || 'diewesemoer';
 
-  // Armed state  (retained, QOS 1)
+  // Mark that we received data from the device
+  lastHeartbeatTimeS = Math.floor(Date.now() / 1000);
+  checkOfflineStatus();
+
+  // Alarm triggered event (with delivery acknowledgement)
+  if (topic === `alarm/${did}/triggered`) {
+    const eventId = data.event_id || 0;
+    if (eventId) {
+      publish(`cmd/${did}/alarm/ack`, makePayload({ event_id: eventId }), 1);
+    }
+    setAlarmState('ALARMING');
+    return;
+  }
+
+  // Actions stream
+  if (topic.endsWith('/actions')) {
+    addActionNotification(data);
+    return;
+  }
+
+  // Events query results (Independent Event Log list)
+  if (topic.endsWith('/events')) {
+    if (data.entries && Array.isArray(data.entries)) {
+      renderEventsList(data.entries);
+    }
+    return;
+  }
+
+  // Batched SD Card logs (SD Logs get) (resolves [object Object] issue by formatting parsed objects)
+  if (topic.endsWith('/log')) {
+    if (data.entries && Array.isArray(data.entries)) {
+      data.entries.forEach(line => {
+        let formattedMsg = line;
+        if (typeof line === 'object' && line !== null) {
+          const arrow = line.dir === 'rx' ? '↓' : (line.dir === 'tx' ? '↑' : '·');
+          formattedMsg = `[${line.ch || 'SYS'}] ${arrow} ${line.topic || ''} | ${line.msg || ''}`;
+        }
+        logRx('sys', 'sd_log', formattedMsg);
+      });
+    }
+    return;
+  }
+
+  // RF capture
+  if (topic.endsWith('/rf/learned')) {
+    const learnedCode = data.code;
+    if (learnedCode !== undefined) {
+      document.getElementById('rf-manual-code').value = '0x' + Number(learnedCode).toString(16).toUpperCase();
+      document.getElementById('rf-learn-status').textContent = `Code Captured: 0x${Number(learnedCode).toString(16).toUpperCase()}`;
+    }
+    return;
+  }
+
+  // Armed state
   if (topic === `status/${did}/armed` || topic.endsWith('/armed')) {
     const state = (data.state || data.armed_state || (data.armed ? 'ARMED' : 'DISARMED') || '').toUpperCase();
     if (state) {
+      if (data.source) lastSource = data.source;
       setAlarmState(state);
-      // Resolve arm/disarm pending
       if (state !== 'DISARMED') setArmPending(false);
       else setDisarmPending(false);
-      // Also clear the opposite pending on any confirmed state
       setArmPending(false);
       setDisarmPending(false);
     }
@@ -1180,11 +1530,9 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Zone / sensor states  (retained, QOS 0/1)
-  // Expected payload: { sensor_id: { armed, disabled, triggered, last_trigger_ts, last_seen }, ... }
+  // Zone / sensor states
   if (topic.endsWith('/zones') || topic.endsWith('/sensor_states')) {
     if (typeof data === 'object' && !data.raw) {
-      // Clear pending markers for any sensor confirmed by this update
       Object.keys(data).forEach(sid => pendingSensors.delete(sid));
       Object.assign(sensorStates, data);
       updateBeams();
@@ -1194,7 +1542,7 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Single sensor trigger event — triggered state cleared only by subsequent MQTT status update
+  // Single sensor trigger event
   if (topic.includes('/triggered') || topic.includes('/breach')) {
     const sid = data.sensor_id || data.zone_id;
     if (sid) {
@@ -1207,32 +1555,38 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Heartbeat  (QOS 0)
+  // Heartbeat
   if (topic.endsWith('/heartbeat')) {
     if (data.uptime)   setStatVal('s-uptime', data.uptime, 'green');
     if (data.ram_free) setStatVal('s-ram', `${Math.round(data.ram_free/1024)} KB`, 'green');
     setStatVal('s-lastseen', new Date().toLocaleTimeString(), 'green');
     setConnStatus('ok', credentials?.broker || '');
-    // Power status from heartbeat if provided
     if (data.power !== undefined) updatePowerStatus(data.power);
+
+    // SD Card free space readout
+    if (data.sd_free_kb !== undefined) {
+      setStatVal('s-sdfree', data.sd_free_kb >= 0 ? `${Math.round(data.sd_free_kb / 1024)} MB` : "not detected", 'green');
+    } else {
+      setStatVal('s-sdfree', "not detected", 'amber');
+    }
     return;
   }
 
-  // Dedicated power status topic: status/{did}/power
-  // Expected: { on_mains: true/false } or { power: "mains"/"backup" }
   if (topic.endsWith('/power')) {
     updatePowerStatus(data);
     return;
   }
 
-  // Config echo  (device publishes its full config here on request)
+  // Config echo
   if (topic.endsWith('/config') || topic.endsWith('/config/current')) {
     deviceConfig = data;
+    updateSensorConfigFromDevice();
     refreshConfigEditor();
+    buildSensorCards();
+    buildRemoteCards();
     return;
   }
 
-  // Alarm triggered
   if (topic.includes('/alarm/') || topic.includes('/triggered')) {
     setAlarmState('ALARMING');
     return;
@@ -1267,7 +1621,6 @@ function setArmPending(on) {
   if (on) {
     btn.classList.add('pending');
     clearTimeout(armPendingTimer);
-    // Safety: auto-clear after 10s if no MQTT confirmation
     armPendingTimer = setTimeout(() => setArmPending(false), 10000);
   } else {
     btn.classList.remove('pending');
@@ -1290,8 +1643,6 @@ function setDisarmPending(on) {
 function sendArmAll() { sendArm(); }
 function sendDisarmAll() { sendDisarm(); }
 
-// Per-sensor enable/disable — command only, NO local state change.
-// State updates only when MQTT status reply arrives.
 function toggleSensor(sensorId) {
   const st  = sensorStates[sensorId] || {};
   const did = credentials?.device_id || 'diewesemoer';
@@ -1319,23 +1670,187 @@ function confirmDisable() {
   if (!disableTarget) return;
   const did      = credentials?.device_id || 'diewesemoer';
   const duration = parseInt(document.getElementById('dm-dur').value);
-  // Publish command only — wait for MQTT status update to confirm
   publish(`cmd/${did}/sensor/disable`,
     makePayload({ sensor_id: disableTarget, duration_s: duration }), 1);
   markPending(disableTarget);
   closeDisableModal();
 }
 
-// Pending set: sensors awaiting MQTT confirmation.
-// Visual-only — never used to drive actual state.
 const pendingSensors = new Set();
 function markPending(sensorId) {
   pendingSensors.add(sensorId);
-  // Reflect in sidebar immediately as "pending…" label only
   buildSidebarSensors();
-  // Safety timeout: if MQTT never replies in 10s, clear the pending marker
-  // so the UI doesn't hang. State itself is unchanged.
   setTimeout(() => { pendingSensors.delete(sensorId); buildSidebarSensors(); }, 10000);
+}
+
+// ─── Manual SOS Triggers ──────────────────────────────────────────
+let sosTapState = {
+  tapsRemaining: 0,
+  timer: null,
+  secondsRemaining: 0,
+  countdownInterval: null
+};
+
+function triggerSOS() {
+  if (alarmState === 'ALARMING') return;
+
+  const CONFIRM_TAPS = 2; // Default 2 confirmation taps
+  const TIMEOUT_S = 10;   // Default 10 seconds
+
+  if (sosTapState.tapsRemaining <= 0) {
+    sosTapState.tapsRemaining = CONFIRM_TAPS;
+    sosTapState.secondsRemaining = TIMEOUT_S;
+
+    const confirmBox = document.getElementById('sos-confirm-box');
+    const tapCountSpan = document.getElementById('sos-tap-count');
+    const timeCountSpan = document.getElementById('sos-time-count');
+    
+    if (confirmBox && tapCountSpan && timeCountSpan) {
+      tapCountSpan.textContent = sosTapState.tapsRemaining;
+      timeCountSpan.textContent = sosTapState.secondsRemaining;
+      confirmBox.style.display = 'block';
+    }
+
+    clearInterval(sosTapState.countdownInterval);
+    sosTapState.countdownInterval = setInterval(() => {
+      sosTapState.secondsRemaining--;
+      if (sosTapState.secondsRemaining <= 0) {
+        resetSosTapState();
+      } else {
+        if (timeCountSpan) timeCountSpan.textContent = sosTapState.secondsRemaining;
+      }
+    }, 1000);
+
+    clearTimeout(sosTapState.timer);
+    sosTapState.timer = setTimeout(() => {
+      resetSosTapState();
+    }, TIMEOUT_S * 1000);
+
+  } else {
+    sosTapState.tapsRemaining--;
+    const tapCountSpan = document.getElementById('sos-tap-count');
+    if (tapCountSpan) tapCountSpan.textContent = sosTapState.tapsRemaining;
+
+    if (sosTapState.tapsRemaining === 0) {
+      executeActualSOS();
+      resetSosTapState();
+    }
+  }
+}
+
+function resetSosTapState() {
+  sosTapState.tapsRemaining = 0;
+  sosTapState.secondsRemaining = 0;
+  clearTimeout(sosTapState.timer);
+  clearInterval(sosTapState.countdownInterval);
+  const confirmBox = document.getElementById('sos-confirm-box');
+  if (confirmBox) confirmBox.style.display = 'none';
+}
+
+function executeActualSOS() {
+  if (sosPending || alarmState === 'ALARMING') return;
+  sosPending = true;
+
+  const btn = document.getElementById('sos-btn');
+  if (btn) btn.style.animation = 'sos-pending-flash 0.5s infinite';
+
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/alarm/sos`, makePayload({
+    source: 'web',
+    ts: Math.floor(Date.now() / 1000)
+  }), 1);
+
+  clearTimeout(sosTimeout);
+  sosTimeout = setTimeout(() => {
+    clearSOSPending();
+  }, 10000);
+}
+function clearSOSPending() {
+  sosPending = false;
+  const btn = document.getElementById('sos-btn');
+  if (btn) btn.style.animation = '';
+}
+
+// ─── Action Notifications Feed (sliding, collapsable) ──────────────
+function getActionIcon(type) {
+  const t = String(type || '').toLowerCase();
+  if (t.includes('phone') || t.includes('call')) return '📞';
+  if (t.includes('sms') || t.includes('message')) return '💬';
+  if (t.includes('http') || t.includes('ntfy')) return '🔔';
+  if (t.includes('mqtt')) return '🌐';
+  if (t.includes('siren')) return '🚨';
+  if (t.includes('sensor') || t.includes('breach')) return '🏃';
+  if (t.includes('power')) return '🔌';
+  return 'ℹ️';
+}
+
+function getActionBorderColor(type) {
+  const t = String(type || '').toLowerCase();
+  if (t.includes('fail') || t.includes('error')) return 'var(--red)';
+  if (t.includes('success') || t.includes('ok') || t.includes('ring') || t.includes('connected') || t.includes('answered')) return 'var(--green)';
+  return 'var(--pink)';
+}
+
+function toggleNotificationsCollapse(collapsed) {
+  notificationsCollapsed = collapsed;
+  const restoreBtn = document.getElementById('action-notifications-restore-btn');
+  const notifs = document.querySelectorAll('.action-notif');
+  if (collapsed) {
+    notifs.forEach(n => n.classList.add('collapsed-state'));
+    if (restoreBtn) restoreBtn.style.display = 'flex';
+  } else {
+    notifs.forEach(n => n.classList.remove('collapsed-state'));
+    if (restoreBtn) restoreBtn.style.display = 'none';
+  }
+}
+
+function clearActionNotifications() {
+  const queue = document.getElementById('action-notifications-queue');
+  if (queue) queue.innerHTML = '';
+  activeActionNotifications = [];
+}
+
+function addActionNotification(entry, animate = true) {
+  const queue = document.getElementById('action-notifications-queue');
+  if (!queue) return;
+
+  if (activeActionNotifications.some(n => n.t === entry.t && n.msg === entry.msg)) return;
+  activeActionNotifications.push(entry);
+
+  const div = document.createElement('div');
+  div.className = 'action-notif';
+  if (notificationsCollapsed) div.classList.add('collapsed-state');
+  div.style.borderLeftColor = getActionBorderColor(entry.type);
+  div.style.cursor = 'pointer'; // Makes it visually clear that the bubble can be clicked
+
+  const tVal = Number(entry.t || 0);
+  const timeStr = tVal ? new Date(tVal * 1000).toLocaleTimeString() : '—';
+  const icon = getActionIcon(entry.type);
+
+  div.innerHTML = `
+    <div class="action-notif-icon">${icon}</div>
+    <div class="action-notif-body">
+      <div class="action-notif-msg">${escHtml(entry.msg)}</div>
+      <div class="action-notif-ts">${timeStr}</div>
+    </div>
+    <!-- stopPropagation on the close button to prevent collapsing when just dismissing -->
+    <button class="action-notif-close" onclick="event.stopPropagation(); this.parentElement.remove()">×</button>
+    <button class="action-notif-toggle-arrow" onclick="event.stopPropagation(); toggleNotificationsCollapse(true)">◀</button>
+  `;
+
+  // Add click listener on the entire bubble to trigger panel collapse on tap
+  div.addEventListener('click', (e) => {
+    toggleNotificationsCollapse(true);
+  });
+
+  queue.insertBefore(div, queue.firstChild);
+
+  if (animate) {
+    div.offsetHeight; // Force reflow
+    div.classList.add('show');
+  } else {
+    div.classList.add('show');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1345,7 +1860,6 @@ function buildFloorplan() {
   const wrap = document.getElementById('fp-wrap');
   const col  = document.getElementById('fp-col');
 
-  // Fit the wrap to the column maintaining image aspect ratio
   function resize() {
     const cw = col.clientWidth;
     const ch = col.clientHeight;
@@ -1353,15 +1867,20 @@ function buildFloorplan() {
     const nat_w = base.naturalWidth  || 800;
     const nat_h = base.naturalHeight || 562;
     const ratio = nat_w / nat_h;
-    let w = cw, h = cw / ratio;
-    if (h > ch) { h = ch; w = ch * ratio; }
+
+    // Mathematically scale the floorplan wrap box to consume exactly 90% of available viewport area
+    let w = cw * 0.9;
+    let h = w / ratio;
+    if (h > ch * 0.9) {
+      h = ch * 0.9;
+      w = h * ratio;
+    }
     wrap.style.width  = `${w}px`;
     wrap.style.height = `${h}px`;
-    // Scale bubble size proportionally: 28px at full native size, min 14px
+
     const scale = w / nat_w;
     const bsz = Math.max(10, Math.round(28 * scale * BUBBLE_SIZE_SCALE));
     document.documentElement.style.setProperty('--bubble-sz', `${bsz}px`);
-    // Scale native-pixel coords to rendered size
     const scaleX = w / nat_w;
     const scaleY = h / nat_h;
     document.querySelectorAll('.sensor-bubble').forEach(b => {
@@ -1370,26 +1889,31 @@ function buildFloorplan() {
       if (cfg) {
         b.style.left = `${cfg.x * scaleX}px`;
         b.style.top  = `${cfg.y * scaleY}px`;
+        b.classList.add('positioned');
       }
     });
+
+    document.querySelectorAll('.beam-layer').forEach(img => {
+      img.classList.add('positioned');
+    });
+
+    scaleAlarmingText();
   }
 
-  const base = document.getElementById('fp-base');
-  base.onload = () => { resize(); _cacheElements(); };
-  if (base.complete) { resize(); _cacheElements(); }
-  window.addEventListener('resize', resize);
+  // 1. Remove existing layers and bubbles first
+  wrap.querySelectorAll('.beam-layer, .sensor-bubble').forEach(el => el.remove());
 
-  // Create beam layers
+  // 2. Create beam layers
   SENSOR_CONFIG.forEach(s => {
     const img = document.createElement('img');
     img.className = 'beam-layer';
     img.src       = `beams/${s.beam}`;
     img.dataset.id = s.id;
-    img.alt       = s.name;
+    img.alt       = "";
     wrap.appendChild(img);
   });
 
-  // Create sensor bubbles
+  // 3. Create new sensor bubbles
   SENSOR_CONFIG.forEach(s => {
     const div = document.createElement('div');
     div.className    = 'sensor-bubble';
@@ -1399,14 +1923,22 @@ function buildFloorplan() {
     div.innerHTML    = `<div class="bub-icon"></div>
       <div class="sensor-warn" id="sensor-warn-${s.id}"></div>`;
     div.addEventListener('click', () => toggleSensor(s.id));
-    // Warn bubble click: show detail (stop propagation to avoid toggleSensor)
     wrap.appendChild(div);
     const warnDiv = div.querySelector(`#sensor-warn-${s.id}`);
     warnDiv.addEventListener('click', e => { e.stopPropagation(); showStaleDetail(s.id); });
   });
+
+  _cacheElements();
+
+  // 4. Bind position measurements and load listeners AFTER elements are in the DOM
+  const base = document.getElementById('fp-base');
+  base.onload = () => { resize(); _cacheElements(); };
+  if (base.complete) { resize(); _cacheElements(); }
+
+  // Use window.onresize to cleanly overwrite previous listeners on rebuild
+  window.onresize = resize;
 }
 
-// ─── Cached element maps for performance ──────────────────────────
 const _beamEls   = {};
 const _bubbleEls = {};
 const _warnEls   = {};
@@ -1425,7 +1957,6 @@ function updateBeams() {
   const systemArmed   = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
   const isAlarming    = alarmState === 'ALARMING';
 
-  // Whole-floorplan alarming border
   const wrap = document.getElementById('fp-wrap');
   if (wrap) wrap.classList.toggle('alarming', isAlarming);
 
@@ -1437,7 +1968,6 @@ function updateBeams() {
     const triggered  = !!st.triggered;
     const stale      = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
-    // Beam overlay
     const beam = _beamEls[s.id];
     if (beam) {
       beam.classList.remove('armed', 'triggered');
@@ -1445,7 +1975,6 @@ function updateBeams() {
       else if (active)          beam.classList.add('armed');
     }
 
-    // Bubble
     const bub = _bubbleEls[s.id];
     if (bub) {
       bub.classList.remove('armed', 'disabled', 'triggered');
@@ -1453,7 +1982,6 @@ function updateBeams() {
       else if (triggered && active) bub.classList.add('triggered');
       else if (active)              bub.classList.add('armed');
 
-      // Stale speech bubble
       const warn = _warnEls[s.id];
       if (warn) {
         if (stale && st.last_seen) {
@@ -1465,71 +1993,117 @@ function updateBeams() {
       }
     }
   });
+
+  const sosBtn = document.getElementById('sos-btn');
+  if (sosBtn) {
+    sosBtn.style.display = isAlarming ? 'none' : 'block';
+    if (isAlarming) clearSOSPending();
+  }
+
+  const sosInfo = document.getElementById('sos-infobox');
+  if (sosInfo) {
+    if (isAlarming && lastSource && lastSource.includes('user_manual')) {
+      sosInfo.style.display = 'block';
+    } else {
+      sosInfo.style.display = 'none';
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  SENSOR CARDS (sensors tab)
+//  SENSOR CARDS (sensors tab with RF code readout & unpaired warnings)
 // ═══════════════════════════════════════════════════════════════════════════
 function buildSensorCards() {
   const container = document.getElementById('sensor-cards');
+  if (!container) return;
   const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING');
   const nowS = Math.floor(Date.now() / 1000);
 
-  // First call: build cards once
-  if (!container._built) {
-    container.innerHTML = '';
-    SENSOR_CONFIG.forEach(s => {
-      const card = document.createElement('div');
-      card.className   = 'sensor-card';
-      card.dataset.sid = s.id;
-      card.innerHTML = `
-        <div class="sc-header">
-          <div class="sc-dot" data-role="dot"></div>
-          <div class="sc-name">${s.name}</div>
-          <div class="sc-badge">${s.zone || '—'}</div>
-        </div>
-        <div class="sc-meta" data-role="meta">ID: ${s.id}<br>Beam: beams/${s.beam}</div>
-        <div class="sc-actions" data-role="actions"></div>`;
-      container.appendChild(card);
-    });
-    container._built = true;
-  }
-
+  container.innerHTML = '';
   SENSOR_CONFIG.forEach(s => {
-    const card    = container.querySelector(`[data-sid="${s.id}"]`);
-    if (!card) return;
+    const card = document.createElement('div');
     const st      = sensorStates[s.id] || {};
     const active  = systemArmed && !st.disabled;
-    const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
     const stale   = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
-    card.className = `sensor-card ${stClass}`;
+    const rfCode = deviceConfig?.sensors?.[s.id]?.code;
+    const hasCode = rfCode !== undefined;
+    const rfDisplay = hasCode
+      ? `0x${Number(rfCode).toString(16).toUpperCase()}`
+      : '<span style="color:var(--red); font-weight:bold;">no sensor code learned for this entry</span>';
 
-    const dot = card.querySelector('[data-role="dot"]');
-    dot.className = `sc-dot ${stClass}`;
+    const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
+    card.className   = `sensor-card ${stClass}${!hasCode ? ' disabled' : ''}`;
+    card.dataset.sid = s.id;
 
-    const meta = card.querySelector('[data-role="meta"]');
-    meta.innerHTML = `ID: ${s.id}<br>Beam: beams/${s.beam}<br>Status: ${
-      st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'
-    }${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleString()}` : ''}${
-      stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}`;
+    card.innerHTML = `
+      <div class="sc-header">
+        <div class="sc-dot ${stClass}" data-role="dot"></div>
+        <div class="sc-name">${s.name}</div>
+        <div class="sc-badge">${s.zone || '—'}</div>
+      </div>
+      <div class="sc-meta" data-role="meta">
+        ID: ${s.id}<br>
+        Beam: beams/${s.beam}<br>
+        RF Code: ${rfDisplay}<br>
+        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}${st.last_seen ? `<br>Last seen: ${new Date(st.last_seen*1000).toLocaleString()} ${timeAgo(st.last_seen)}` : ''}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
+      </div>
+      <div class="sc-actions" data-role="actions">
+        ${st.disabled
+          ? `<button class="sc-btn primary" onclick="toggleSensor('${s.id}')">Re-enable</button>`
+          : `<button class="sc-btn" onclick="toggleSensor('${s.id}')">Disable…</button>`
+        }
+      </div>`;
+    container.appendChild(card);
+  });
+}
 
-    const actions = card.querySelector('[data-role="actions"]');
-    actions.innerHTML = st.disabled
-      ? `<button class="sc-btn primary" onclick="toggleSensor('${s.id}')">Re-enable</button>`
-      : `<button class="sc-btn" onclick="toggleSensor('${s.id}')">Disable…</button>`;
+function buildRemoteCards() {
+  const container = document.getElementById('remote-cards');
+  if (!container) return;
+  container.innerHTML = '';
+  const remotes = deviceConfig?.remotes || {};
+  const remoteList = ['remote1', 'remote2', 'remote3', 'remote4'];
+
+  remoteList.forEach(rid => {
+    const card = document.createElement('div');
+    card.className = 'sensor-card';
+    const rData = remotes[rid] || {};
+    const commands = ['arm_toggle', 'arm', 'disarm', 'sos'];
+    let cmdListHtml = '';
+    commands.forEach(cmd => {
+      const code = rData[cmd];
+      const display = code !== undefined
+        ? `0x${Number(code).toString(16).toUpperCase()}`
+        : '<span style="color:var(--text-muted);">not learned</span>';
+      cmdListHtml += `<div style="font-size:10px;"><strong>${cmd}:</strong> ${display}</div>`;
+    });
+    card.innerHTML = `
+      <div class="sc-header">
+        <div class="sc-dot disarmed"></div>
+        <div class="sc-name">${rid.toUpperCase()}</div>
+      </div>
+      <div class="sc-meta" style="line-height:1.5;">
+        ${cmdListHtml}
+      </div>
+    `;
+    container.appendChild(card);
   });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  SIDEBAR SENSOR LIST
 // ═══════════════════════════════════════════════════════════════════════════
-function buildSidebarSensors() {
+function buildSidebarSensors(forceRebuild = false) {
   const container = document.getElementById('sidebar-sensors');
+  if (!container) return;
   const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
   const nowS = Math.floor(Date.now() / 1000);
 
-  // First call: build rows once
+  if (forceRebuild) {
+    container._built = false;
+  }
+
   if (!container._built) {
     container.innerHTML = '';
     SENSOR_CONFIG.forEach(s => {
@@ -1548,7 +2122,6 @@ function buildSidebarSensors() {
     container._built = true;
   }
 
-  // Update each row in-place
   SENSOR_CONFIG.forEach(s => {
     const row    = container.querySelector(`[data-sid="${s.id}"]`);
     if (!row) return;
@@ -1560,10 +2133,7 @@ function buildSidebarSensors() {
                   : st.triggered && active ? 'triggered'
                   : active        ? 'armed' : 'disarmed';
 
-    const lastTs = st.last_trigger_ts
-      ? new Date(st.last_trigger_ts).toLocaleTimeString()
-      : (st.last_seen ? new Date(st.last_seen * 1000).toLocaleTimeString() : null);
-
+    const agoStr = st.last_seen ? timeAgo(st.last_seen) : '';
     const stale  = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
 
     const dot    = row.querySelector('[data-role="dot"]');
@@ -1578,7 +2148,7 @@ function buildSidebarSensors() {
       + (pending ? ' <span style="color:var(--amber);font-size:9px">…</span>' : '')
       + (stale ? ' <span style="color:var(--amber);font-size:9px" title="Stale sensor">⚠</span>' : '');
 
-    zone.textContent = (s.zone || '') + (lastTs ? ` · ${lastTs}` : '');
+    zone.textContent = (s.zone || '') + (agoStr ? ` · ${agoStr}` : '');
 
     toggle.textContent = pending ? '…' : st.disabled ? 'enable' : 'disable';
     toggle.disabled    = !!pending;
@@ -1607,13 +2177,11 @@ function selectConfigSection(el, section) {
 function requestConfig() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
-  // Request current config from device
   publish(`cmd/${did}/config/get`, makePayload(), 1);
-  // Subscribe to config response
   if (client?.connected) client.subscribe(`status/${did}/config`, { qos: 1 });
 }
 
-function refreshConfigEditor() {
+/*function refreshConfigEditor() {
   const ta = document.getElementById('config-textarea');
   if (!deviceConfig) { ta.value = '// Waiting for device config…\n// Click "Publish to device" after editing.'; return; }
 
@@ -1624,9 +2192,34 @@ function refreshConfigEditor() {
     data = deviceConfig[configSection] || {};
   }
   ta.value = JSON.stringify(data, null, 2);
+}*/
+
+function refreshConfigEditor() {
+  const ta = document.getElementById('config-textarea');
+  if (!deviceConfig) {
+    ta.textContent = '// Waiting for device config…\n// Click "Publish to device" after editing.';
+    return;
+  }
+
+  let data;
+  if (configSection === 'full') {
+    data = deviceConfig;
+  } else {
+    data = deviceConfig[configSection] || {};
+  }
+
+  // Set the text content of the code block
+  ta.textContent = JSON.stringify(data, null, 2);
+
+  // Apply syntax highlighting to this exact node
+  if (typeof Prism !== 'undefined') {
+    setTimeout(() => {
+      Prism.highlightElement(ta);
+    }, 50);
+  }
 }
 
-function publishConfig() {
+/*async function publishConfig() {
   if (!credentials) { alert('Not connected'); return; }
   const ta  = document.getElementById('config-textarea');
   let parsed;
@@ -1634,10 +2227,34 @@ function publishConfig() {
   catch(e) { alert('Invalid JSON: ' + e.message); return; }
 
   const did = credentials.device_id || 'diewesemoer';
+  const jsonStr = JSON.stringify(parsed);
+  const hashVal = await sha256(jsonStr);
+
   if (configSection === 'full') {
-    publish(`cmd/${did}/config/set`, makePayload({ config: parsed }), 1);
+    publish(`cmd/${did}/config/set`, makePayload({ config: parsed, sha256: hashVal }), 1);
   } else {
-    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed }), 1);
+    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed, sha256: hashVal }), 1);
+  }
+}*/
+
+async function publishConfig() {
+  if (!credentials) { alert('Not connected'); return; }
+  const ta  = document.getElementById('config-textarea');
+  let parsed;
+  try {
+    // Reads textContent from the contenteditable DOM element
+    parsed = JSON.parse(ta.textContent);
+  }
+  catch(e) { alert('Invalid JSON: ' + e.message); return; }
+
+  const did = credentials.device_id || 'diewesemoer';
+  const jsonStr = JSON.stringify(parsed);
+  const hashVal = await sha256(jsonStr);
+
+  if (configSection === 'full') {
+    publish(`cmd/${did}/config/set`, makePayload({ config: parsed, sha256: hashVal }), 1);
+  } else {
+    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed, sha256: hashVal }), 1);
   }
 }
 
@@ -1647,19 +2264,30 @@ function publishConfig() {
 function setAlarmState(state) {
   alarmState = state;
   const badge = document.getElementById('state-badge');
-  badge.textContent = state;
-  badge.className   = `state-badge ${state}`;
+  if (badge) {
+    badge.textContent = state;
+    badge.className   = `state-badge ${state}`;
+  }
   setStatVal('s-state', state,
     state === 'DISARMED' ? 'green' :
     state === 'ARMED'    ? 'amber' :
     state === 'ALARMING' ? 'red'   : 'pink');
+
+  scaleAlarmingText();
+
+  if (state === 'ALARMING') {
+    const did = credentials?.device_id || 'diewesemoer';
+    publish(`cmd/${did}/events/get`, makePayload({ alarm: true }), 1);
+  }
+
+  if (state === 'DISARMED' && lastSource !== 'auto_disarm') {
+    clearActionNotifications();
+  }
 }
 
 function updateStateBadge(state) { setAlarmState(state || alarmState); }
 
-// ─── Power status ─────────────────────────────────────────────────
 function updatePowerStatus(data) {
-  // Accept: boolean true/false, {on_mains:bool}, {power:"mains"/"backup"}, string
   let onMains = true;
   if (typeof data === 'boolean') {
     onMains = data;
@@ -1670,13 +2298,6 @@ function updatePowerStatus(data) {
     onMains = data.toLowerCase() !== 'backup' && data.toLowerCase() !== 'off';
   }
   setStatVal('s-power', onMains ? 'On' : 'Off, on backup', onMains ? 'green' : 'amber');
-}
-
-// ─── Stale sensor check ───────────────────────────────────────────
-function isSensorStale(st) {
-  if (!st || !st.last_seen) return false;
-  const nowS = Math.floor(Date.now() / 1000);
-  return (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S;
 }
 
 function staleDuration(nowS, lastSeenS) {
@@ -1702,12 +2323,12 @@ function showStaleDetail(sensorId) {
 
   document.getElementById('sdm-body').innerHTML =
     `This sensor has last been seen <strong>${dur}</strong>. ` +
-    `This may simply mean the monitored area has not been disturbed — ` +
+    `Monitored area may simply have not been disturbed — ` +
     `which is normal for low-traffic zones. However, it could also indicate ` +
     `the sensor is inactive, out of battery, or physically damaged.`;
 
   document.getElementById('sdm-tip').innerHTML =
-    `<strong>Recommended:</strong> Walk through or otherwise trigger the ` +
+    `<strong>Recommended:</strong> Walk through or trigger the ` +
     `<em>${name}</em> sensor when possible to confirm it is functioning correctly. This can be done while the system is disarmed. ` +
     `If it fails to report after being triggered, check power and connectivity.`;
 
@@ -1730,13 +2351,260 @@ function updateConnStatus(id, txt, cls) { setStatVal(id, txt, cls); }
 function setConnStatus(type, label) {
   const dot   = document.getElementById('conn-dot');
   const lbl   = document.getElementById('conn-label');
-  dot.className = 'conn-dot ' + type;
-  lbl.textContent = label;
+  if (dot) dot.className = 'conn-dot ' + type;
+  if (lbl) lbl.textContent = label;
   updateConnStatus('s-mqtt', label, type === 'ok' ? 'green' : type === 'err' ? 'red' : 'amber');
 }
 
+// ─── Dynamic Alarming text scaling ───────────────────────────────
+function scaleAlarmingText() {
+  const label = document.querySelector('.fp-alarming-label');
+  const wrap = document.getElementById('fp-wrap');
+  if (!label || !wrap) return;
+  const wrapWidth = wrap.clientWidth;
+  if (wrapWidth === 0) return;
+  if (!alarmTextRatioCache) {
+    const originalFontSize = parseFloat(window.getComputedStyle(label).fontSize) || 11;
+    const textWidth = label.scrollWidth;
+    if (textWidth > 0) {
+      alarmTextRatioCache = originalFontSize / textWidth;
+    } else {
+      alarmTextRatioCache = 11 / 80;
+    }
+  }
+  const targetFontSize = 0.4 * wrapWidth * alarmTextRatioCache;
+  label.style.fontSize = `${targetFontSize}px`;
+}
+
+// ─── RF Learner Logic ─────────────────────────────────────────────
+function populateRfSensorDropdown() {
+  const select = document.getElementById('rf-sensor-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Choose Sensor --</option>';
+
+  SENSOR_CONFIG.forEach(s => {
+    const remoteSensor = deviceConfig?.sensors?.[s.id];
+    const code = remoteSensor?.code;
+    if (!code) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      select.appendChild(opt);
+    }
+  });
+}
+
+function openRfLearnModal() {
+  populateRfSensorDropdown();
+  document.getElementById('rf-learn-modal').style.display = 'flex';
+  document.getElementById('rf-learn-status').textContent = 'Stopped';
+  document.getElementById('rf-manual-code').value = '';
+}
+
+function closeRfLearnModal() {
+  if (rfLearning) toggleRfLearnState();
+  document.getElementById('rf-learn-modal').style.display = 'none';
+}
+
+function onRfTargetTypeChange() {
+  const type = document.getElementById('rf-target-type').value;
+  document.getElementById('rf-sensor-select-container').style.display = type === 'sensor' ? 'block' : 'none';
+  document.getElementById('rf-remote-container').style.display = type === 'remote' ? 'block' : 'none';
+}
+
+function toggleRfLearnState() {
+  const btn = document.getElementById('btn-rf-learn-toggle');
+  const status = document.getElementById('rf-learn-status');
+  const did = credentials?.device_id || 'diewesemoer';
+  if (!rfLearning) {
+    rfLearning = true;
+    btn.textContent = 'Stop Learn';
+    btn.style.background = 'var(--red)';
+    btn.style.color = '#fff';
+    status.textContent = 'Learning… Waiting for signal…';
+    publish(`cmd/${did}/rf/learn/start`, makePayload(), 1);
+    if (client?.connected) {
+      client.subscribe(`status/${did}/rf/learned`, { qos: 1 });
+    }
+  } else {
+    rfLearning = false;
+    btn.textContent = 'Start Learn';
+    btn.style.background = 'var(--pink-soft)';
+    btn.style.color = 'var(--pink)';
+    status.textContent = 'Stopped';
+    publish(`cmd/${did}/rf/learn/stop`, makePayload(), 1);
+  }
+}
+
+function assignRfCode() {
+  const type = document.getElementById('rf-target-type').value;
+  const manualCodeVal = document.getElementById('rf-manual-code').value.trim();
+  if (!manualCodeVal) { alert('No code to assign!'); return; }
+  let codeNum;
+  if (manualCodeVal.toLowerCase().startsWith('0x')) {
+    codeNum = parseInt(manualCodeVal, 16);
+  } else {
+    codeNum = parseInt(manualCodeVal, 10);
+  }
+  if (isNaN(codeNum)) { alert('Invalid code format!'); return; }
+
+  const did = credentials?.device_id || 'diewesemoer';
+  if (type === 'sensor') {
+    const sid = document.getElementById('rf-sensor-select').value;
+    if (!sid) { alert('Please select a sensor'); return; }
+    publish(`cmd/${did}/rf/learn/assign`, makePayload({
+      sensor_id: sid,
+      code: codeNum,
+      role: 'sensor'
+    }), 1);
+  } else {
+    const rid = document.getElementById('rf-remote-id').value;
+    const rcmd = document.getElementById('rf-remote-cmd').value;
+    publish(`cmd/${did}/rf/learn/assign`, makePayload({
+      sensor_id: rid,
+      code: codeNum,
+      role: 'remote',
+      command: rcmd
+    }), 1);
+  }
+  closeRfLearnModal();
+  setTimeout(requestConfig, 1000);
+}
+
+// ─── Add New Sensor dynamically (Unique ID checks) ────────────────
+function toggleAddSensorForm() {
+  const form = document.getElementById('add-sensor-form');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function submitAddSensor() {
+  const id = document.getElementById('add-s-id').value.trim();
+  const name = document.getElementById('add-s-name').value.trim();
+  const beam = document.getElementById('add-s-beam').value.trim();
+  const zone = document.getElementById('add-s-zone').value.trim();
+
+  if (!id || !name || !beam) { alert('ID, Name, and Beam are required.'); return; }
+
+  const existsLocal = SENSOR_CONFIG.some(s => s.id === id);
+  const existsRemote = deviceConfig?.sensors?.[id] !== undefined;
+
+  if (existsLocal || existsRemote) {
+    alert(`Error: Sensor ID "${id}" is not unique! Already exists.`);
+    return;
+  }
+
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/sensor/add`, makePayload({
+    sensor: { id, name, beam, zone }
+  }), 1);
+
+  SENSOR_CONFIG.push({ id, name, beam, x: 100, y: 100, zone });
+  buildFloorplan();
+  buildSensorCards();
+  buildSidebarSensors();
+
+  toggleAddSensorForm();
+  alert(`Sensor ${name} added successfully! (Coordinates defaulted to 100,100 on layout)`);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-//  LOG
+//  EVENTS LOG VIEW (Separate high-level Event Log)
+// ═══════════════════════════════════════════════════════════════════════════
+function requestEventsList() {
+  if (!credentials) return;
+  const did = credentials.device_id || 'diewesemoer';
+  publish(`cmd/${did}/events/get`, makePayload({ count: 150 }), 1);
+}
+
+function clearEventsList() {
+  const container = document.getElementById('events-log-body');
+  if (container) container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">Log cleared. Click Fetch to retrieve.</div>';
+}
+
+function renderEventsList(entries) {
+  const container = document.getElementById('events-log-body');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!entries || entries.length === 0) {
+    container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">No events recorded. Click Fetch to retrieve.</div>';
+    return;
+  }
+  
+  let prevTimeS = null;
+  entries.forEach(entry => {
+    const tVal = Number(entry.t || 0);
+    
+    // Inject a visual spacer with computed duration gap if time between events exceeds 10 minutes (600 seconds)
+    if (prevTimeS !== null) {
+      const diffS = tVal - prevTimeS;
+      if (diffS > 600) {
+        let gapText = '';
+        if (diffS < 3600) {
+          gapText = `${Math.round(diffS / 60)} minutes`;
+        } else if (diffS < 86400) {
+          const h = Math.floor(diffS / 3600);
+          const m = Math.round((diffS % 3600) / 60);
+          gapText = `${h} hour${h === 1 ? '' : 's'}${m ? ` ${m} min` : ''}`;
+        } else {
+          const d = Math.round(diffS / 86400);
+          gapText = `${d} day${d === 1 ? '' : 's'}`;
+        }
+        
+        const spacer = document.createElement('div');
+        spacer.style.display = 'flex';
+        spacer.style.alignItems = 'center';
+        spacer.style.justifyContent = 'center';
+        spacer.style.padding = '12px 12px';
+        spacer.style.color = 'var(--text-muted)';
+        spacer.style.fontSize = '9px';
+        spacer.style.fontFamily = 'var(--mono)';
+        spacer.style.textTransform = 'uppercase';
+        spacer.style.letterSpacing = '0.1em';
+        
+        spacer.innerHTML = `
+          <div style="flex:1; height:1px; background:var(--border); margin-right:16px;"></div>
+          <span>GAP: ${gapText} elapsed</span>
+          <div style="flex:1; height:1px; background:var(--border); margin-left:16px;"></div>
+        `;
+        container.appendChild(spacer);
+      }
+    }
+    prevTimeS = tVal;
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.gap = '12px';
+    row.style.padding = '8px 12px';
+    row.style.borderBottom = '1px solid var(--border)';
+    row.style.fontFamily = 'var(--mono)';
+    row.style.fontSize = '11px';
+    row.style.alignItems = 'center';
+
+    const timeStr = tVal ? new Date(tVal * 1000).toLocaleString() : '—';
+    const icon = getActionIcon(entry.type);
+    const typeBadgeColor = getActionBorderColor(entry.type);
+
+    row.innerHTML = `
+      <span style="color:var(--text-muted); width:150px; flex-shrink:0;">${timeStr}</span>
+      <span style="display:inline-block; width:24px; height:24px; text-align:center; line-height:24px; border-radius:50%; background:var(--bg3); flex-shrink:0;">${icon}</span>
+      <span style="color:${typeBadgeColor}; font-weight:bold; width:120px; flex-shrink:0; text-transform:uppercase; font-size:10px;">${entry.type}</span>
+      <span style="color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(entry.msg)}">${escHtml(entry.msg)}</span>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SD CARD LOG ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+function requestSDLogs() {
+  if (!credentials) return;
+  const did = credentials.device_id || 'diewesemoer';
+  publish(`cmd/${did}/logs/get`, makePayload({ count: 200 }), 1);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RAW LOG ACTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 const MAX_LOG = 400;
 
@@ -1749,11 +2617,27 @@ function logRx(dir, topic, msg) {
 
 function sysLog(msg) { logRx('sys', 'system', msg); }
 
+function highlightLogMsg(msg) {
+  try {
+    const trimmed = msg.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = JSON.parse(msg);
+      const formatted = JSON.stringify(parsed, null, 2);
+      if (window.Prism) {
+        return Prism.highlight(formatted, Prism.languages.json, 'json');
+      }
+      return escHtml(formatted);
+    }
+  } catch (e) {}
+  return escHtml(msg);
+}
+
 function appendLogEntry({ ts, dir, topic, msg }) {
   const filter = document.getElementById('log-filter')?.value.toLowerCase() || '';
   if (filter && !topic.toLowerCase().includes(filter) && !msg.toLowerCase().includes(filter)) return;
 
   const body  = document.getElementById('log-body');
+  if (!body) return;
   const entry = document.createElement('div');
   entry.className = 'log-entry';
   entry.dataset.topic = topic;
@@ -1762,7 +2646,7 @@ function appendLogEntry({ ts, dir, topic, msg }) {
     <span class="log-ts">${ts}</span>
     <span class="log-dir ${dir}">${dir === 'rx' ? '↓' : dir === 'tx' ? '↑' : '·'}</span>
     <span class="log-topic">${topic}</span>
-    <span class="log-msg">${escHtml(msg)}</span>`;
+    <span class="log-msg"><pre><code class="language-json">${highlightLogMsg(msg)}</code></pre></span>`;
   body.appendChild(entry);
 
   if (logEntries.length > MAX_LOG) {
@@ -1784,7 +2668,8 @@ function filterLog() {
 }
 
 function clearLog() {
-  document.getElementById('log-body').innerHTML = '';
+  const body = document.getElementById('log-body');
+  if (body) body.innerHTML = '';
   logEntries = [];
 }
 
@@ -1793,10 +2678,7 @@ function escHtml(s) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  DEV TEST FUNCTIONS — remove when no longer needed
-//  All dev actions simulate what the Pico would actually publish back.
-//  They call handleMessage() with real MQTT topic+payload shapes so the
-//  exact same code path runs as in production.
+//  DEV TEST FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 function devDid() { return credentials?.device_id || 'diewesemoer'; }
 
@@ -1807,19 +2689,16 @@ function devEmit(topic, payload) {
 }
 
 function devSetState(state) {
-  // Highlight active state button
   event.target.closest('#dev-toolbar').querySelectorAll('.dev-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
 
   const did = devDid();
-  // Emit a realistic /armed status update (what the Pico publishes on state change)
   devEmit(`status/${did}/armed`, {
     state:  state,
     source: 'dev_test',
     armed:  state !== 'DISARMED',
   });
 
-  // Also emit a full zones update reflecting the new system state so beams update correctly
   const systemArmed = (state === 'ARMED' || state === 'ALARMING' || state === 'ENTRY_DELAY');
   const zonesPayload = {};
   SENSOR_CONFIG.forEach(s => {
@@ -1839,14 +2718,11 @@ function devTriggerSensor() {
   const sid = sel.value;
   const did = devDid();
 
-  // Emit the breach event first (what ZoneController publishes)
   devEmit(`status/${did}/triggered`, {
     sensor_id: sid,
     zone_id:   SENSOR_CONFIG.find(s => s.id === sid)?.zone || '',
   });
 
-  // Then emit a zones update with triggered: true for this sensor
-  // (what AlarmManager publishes after processing the breach)
   const zonesPayload = {};
   SENSOR_CONFIG.forEach(s => {
     const existing = sensorStates[s.id] || {};
@@ -1861,7 +2737,6 @@ function devTriggerSensor() {
 
 function devClearTriggers() {
   const did = devDid();
-  // Emit a zones update with all triggered flags cleared
   const zonesPayload = {};
   SENSOR_CONFIG.forEach(s => {
     zonesPayload[s.id] = { ...(sensorStates[s.id] || {}), triggered: false };
@@ -1908,8 +2783,8 @@ function devToggleToolbar() {
   tb.style.pointerEvents = devToolbarVisible ? '' : 'none';
 }
 </script>
-<!-- ═══ DEV TEST TOOLBAR — remove this entire block when done ═══ -->
-<div id="dev-toolbar">
+<!-- ═══ DEV TEST TOOLBAR ═══ -->
+<!--<div id="dev-toolbar">
   <span>dev</span>
   <button class="dev-btn" onclick="devSetState('DISARMED')">Disarmed</button>
   <button class="dev-btn" onclick="devSetState('ARMED')">Armed</button>
@@ -1923,6 +2798,7 @@ function devToggleToolbar() {
   <button class="dev-btn" onclick="devEnableSensor()">Enable</button>
   <div class="dev-sep"></div>
   <button class="dev-btn" onclick="devToggleToolbar()" style="opacity:.5">hide</button>
-</div>
+</div>-->
 <!-- ═══ end dev toolbar ═══ -->
+</body>
 </html>
