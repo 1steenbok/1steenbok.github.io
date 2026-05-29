@@ -405,12 +405,14 @@ header {
   color: var(--text); /* Default high-contrast standard text */
 }
 .sensor-card.armed   { border-color: rgba(232,99,138,.4); }
+.sensor-card.triggered { border-color: var(--red); box-shadow: 0 0 8px rgba(184,50,50,0.15); }
 .sensor-card.disabled{ opacity: .5; }
 .sc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .sc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .sc-dot.armed    { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
 .sc-dot.disarmed { background: var(--text-muted); }
 .sc-dot.disabled { background: var(--text-muted); opacity:.4; }
+.sc-dot.triggered { background: var(--red); box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
 .sc-name { font-size: 13px; font-weight: 600; flex: 1; }
 .sc-badge {
   font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px;
@@ -777,6 +779,7 @@ const SENSOR_LOCATIONS = {
   "pir_container_power":     { x: 394, y: 420 },
   "pir_front_windows":       { x: 512, y: 381 },
   "pir_main_power":          { x: 667, y: 271 },
+  "power_sense":             { x: 655, y: 475 },
 };
 
 function initSensorConfigDefaults() {
@@ -784,6 +787,7 @@ function initSensorConfigDefaults() {
     return {
       id: id,
       name: id.replace(/_/g, ' ').replace(/ \w/g, c => c.toUpperCase()),
+      type: 'pir',
       beam: `beam${index + 1}.png`,
       x: SENSOR_LOCATIONS[id].x,
       y: SENSOR_LOCATIONS[id].y,
@@ -813,6 +817,7 @@ function updateSensorConfigFromDevice() {
     SENSOR_CONFIG.push({
       id: id,
       name: s.name || id,
+      type: s.type || 'pir',
       beam: beam,
       x: loc.x,
       y: loc.y,
@@ -1730,6 +1735,7 @@ function setArmPending(on) {
   }
 }
 
+// ─── Visual feedback ──────────────────────────────────────────────
 function setDisarmPending(on) {
   disarmPending = on;
   const btn = document.querySelector('.btn-disarm');
@@ -1974,11 +1980,12 @@ function updateBeams() {
     const active     = systemArmed && !st.disabled;
     const triggered  = !!st.triggered;
     const stale      = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
+    const isPower    = (s.type === 'power' || st.type === 'power');
 
     const beam = _beamEls[s.id];
     if (beam) {
       beam.classList.remove('armed', 'triggered');
-      if (triggered && active)  beam.classList.add('triggered');
+      if (triggered && (active || isPower))  beam.classList.add('triggered');
       else if (active)          beam.classList.add('armed');
     }
 
@@ -1986,7 +1993,7 @@ function updateBeams() {
     if (bub) {
       bub.classList.remove('armed', 'disabled', 'triggered');
       if (st.disabled)              bub.classList.add('disabled');
-      else if (triggered && active) bub.classList.add('triggered');
+      else if (triggered && (active || isPower)) bub.classList.add('triggered');
       else if (active)              bub.classList.add('armed');
 
       const warn = _warnEls[s.id];
@@ -2032,6 +2039,9 @@ function buildSensorCards() {
     const st      = sensorStates[s.id] || {};
     const active  = systemArmed && !st.disabled;
     const stale   = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
+    const isPower = (s.type === 'power' || st.type === 'power');
+    const triggered = !!st.triggered;
+    const isTriggeredToShow = triggered && (active || isPower);
 
     // Retrieve RF Code either from extracted configurations or parent object lookup
     const rfCodes = s.codes || deviceConfig?.sensors?.[s.id]?.codes || (s.code ? [s.code] : (deviceConfig?.sensors?.[s.id]?.code ? [deviceConfig?.sensors?.[s.id]?.code] : null));
@@ -2040,7 +2050,7 @@ function buildSensorCards() {
       ? rfCodes.map(code => `0x${Number(code).toString(16).toUpperCase()}`).join(', ')
       : '<span style="color:var(--red); font-weight:bold;">no sensor code learned for this entry</span>';
 
-    const stClass = st.disabled ? 'disabled' : active ? 'armed' : 'disarmed';
+    const stClass = st.disabled ? 'disabled' : isTriggeredToShow ? 'triggered' : active ? 'armed' : 'disarmed';
     card.className   = `sensor-card ${stClass}${!hasCode ? ' disabled' : ''}`;
     card.dataset.sid = s.id;
 
@@ -2055,7 +2065,7 @@ function buildSensorCards() {
         Beam: beams/${s.beam}<br>
         RF Code: ${rfDisplay}<br>
         Last Seen: ${st.last_seen ? `${new Date(st.last_seen*1000).toLocaleString()} ${timeAgo(st.last_seen)}` : 'never'}<br>
-        Status: ${st.disabled ? '⊘ disabled' : active ? '● armed' : '○ inactive'}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
+        Status: ${st.disabled ? '⊘ disabled' : isTriggeredToShow ? '● triggered' : active ? '● armed' : '○ inactive'}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
       </div>
       <div class="sc-actions" data-role="actions">
         ${st.disabled
@@ -2137,9 +2147,12 @@ function buildSidebarSensors(forceRebuild = false) {
     const st      = sensorStates[s.id] || {};
     const active  = systemArmed && !st.disabled;
     const pending = pendingSensors.has(s.id);
+    const isPower = (s.type === 'power' || st.type === 'power');
+    const triggered = !!st.triggered;
+    const isTriggeredToShow = triggered && (active || isPower);
     const stClass = pending       ? 'pending'
                   : st.disabled   ? 'disabled'
-                  : st.triggered && active ? 'triggered'
+                  : isTriggeredToShow ? 'triggered'
                   : active        ? 'armed' : 'disarmed';
 
     const agoStr = st.last_seen ? timeAgo(st.last_seen) : '';
@@ -2153,7 +2166,7 @@ function buildSidebarSensors(forceRebuild = false) {
     dot.className = `s-dot ${stClass}`;
 
     name.innerHTML = s.name
-      + (st.triggered && active ? ' <span style="color:var(--red);font-size:9px">●TRIG</span>' : '')
+      + (isTriggeredToShow ? ' <span style="color:var(--red);font-size:9px">●TRIG</span>' : '')
       + (pending ? ' <span style="color:var(--amber);font-size:9px">…</span>' : '')
       + (stale ? ' <span style="color:var(--amber);font-size:9px" title="Stale sensor">⚠</span>' : '');
 
@@ -2486,6 +2499,7 @@ function requestEventsList() {
   publish(`cmd/${did}/events/get`, makePayload({ count: 150 }), 1);
 }
 
+// ─── Events list mapping and formatting ───────────────────────────
 function clearEventsList() {
   const container = document.getElementById('events-log-body');
   if (container) container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">Log cleared. Click Fetch to retrieve.</div>';
@@ -2566,6 +2580,7 @@ function renderEventsList(entries) {
 
 function updateConnStatus(id, txt, cls) { setStatVal(id, txt, cls); }
 
+// ─── MQTT state updates ───────────────────────────────────────────
 function setConnStatus(type, label) {
   const dot   = document.getElementById('conn-dot');
   const lbl   = document.getElementById('conn-label');
