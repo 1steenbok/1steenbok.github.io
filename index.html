@@ -143,6 +143,14 @@ header {
 /* ─── STATUS TAB ─────────────────────────────────────────────────── */
 #panel-status { flex-direction: row; gap: 0; overflow: hidden; position: relative; }
 
+/* Hardware acceleration hints to prevent scrolling lag during active animations on mobile */
+.fp-wrap,
+.beam-layer,
+.sensor-bubble,
+.fp-wrap::after {
+  will-change: transform, opacity;
+}
+
 /* Floorplan column */
 .floorplan-col {
   flex: 1; position: relative; overflow: hidden;
@@ -287,7 +295,7 @@ header {
 /* Raise stale bubble above alarming overlays (z-index 30/31) */
 .sensor-bubble:has(.sensor-warn.stale) { z-index: 50; }
 .sensor-bubble {
-  position: absolute; transform: translate(-50%, -50%);
+  position: absolute; transform: translate3d(-50%, -50%, 0);
   width: var(--bubble-sz, 28px); height: var(--bubble-sz, 28px); border-radius: 50%;
   background: var(--pink-dim); border: 2px solid var(--pink);
   cursor: pointer; transition: all .25s;
