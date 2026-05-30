@@ -176,29 +176,30 @@ header {
   opacity: 1;
 }
 .fp-wrap .beam-layer.triggered.positioned {
-  filter: none;
+  filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3);
   opacity: 1;
-  animation: beam-flash .5s infinite;
+  animation: beam-opacity-flash .5s infinite ease-in-out;
 }
-@keyframes beam-flash {
-  0%,100% { filter: none; opacity: 1; }
-  50%      { filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3); opacity: .85; }
+@keyframes beam-opacity-flash {
+  0%,100% { opacity: 0.35; }
+  50%      { opacity: 1.0; }
 }
 
 /* Alarming overlay — red pulsing border around the whole floor plan */
 .fp-wrap::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  border: 3px solid transparent; border-radius: 2px;
-  transition: border-color .3s;
+  border: 3px solid var(--red); border-radius: 2px;
+  box-shadow: inset 0 0 24px 4px rgba(184,50,50,.35), 0 0 18px 4px rgba(184,50,50,.25);
+  opacity: 0;
+  transition: opacity .3s;
   z-index: 30;
 }
 .fp-wrap.alarming::after {
-  border-color: var(--red);
-  animation: fp-alarm-border .55s infinite;
+  animation: fp-alarm-border-composited .55s infinite ease-in-out;
 }
-@keyframes fp-alarm-border {
-  0%,100% { box-shadow: inset 0 0 0 0 rgba(184,50,50,0),   0 0 0 0 rgba(184,50,50,0); }
-  50%     { box-shadow: inset 0 0 24px 4px rgba(184,50,50,.35), 0 0 18px 4px rgba(184,50,50,.25); }
+@keyframes fp-alarm-border-composited {
+  0%,100% { opacity: 0.1; }
+  50%     { opacity: 1.0; }
 }
 /* "Alarming" label top-left of floor plan */
 .fp-alarming-label {
@@ -295,6 +296,11 @@ header {
   opacity: 0;
   transition: opacity .3s, background .25s, border-color .25s, box-shadow .25s;
 }
+.sensor-bubble::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 50%;
+  border: 2px solid var(--red); opacity: 0; transform: scale(1);
+  pointer-events: none; z-index: -1;
+}
 .sensor-bubble.positioned {
   opacity: 1;
 }
@@ -313,13 +319,19 @@ header {
 .sensor-bubble.armed .bub-icon { opacity: 1; }
 .sensor-bubble.triggered {
   background: var(--red); border-color: #FF4444;
-  box-shadow: 0 0 0 0 rgba(184,50,50,.6);
-  animation: bub-trigger .5s infinite;
+  box-shadow: none;
+}
+.sensor-bubble.triggered::before {
+  animation: bub-trigger-composited .8s infinite ease-out;
 }
 .sensor-bubble.triggered .bub-icon { opacity: 1; }
 @keyframes bub-trigger {
-  0%,100% { box-shadow: 0 0 0 0 rgba(184,50,50,.7); }
-  50%     { box-shadow: 0 0 0 8px rgba(184,50,50,0); }
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1.0; }
+}
+@keyframes bub-trigger-composited {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 .sensor-bubble.disabled {
   background: var(--bg3); border-color: var(--text-muted);
@@ -374,7 +386,7 @@ header {
 .sensor-row:hover { opacity: .8; }
 .s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: all .2s; }
 .s-dot.armed     { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
-.s-dot.triggered { background: var(--red);  box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
+.s-dot.triggered { background: var(--red); animation: bub-trigger .5s infinite; }
 .s-dot.disarmed  { background: var(--text-muted); }
 .s-dot.disabled  { background: var(--text-muted); opacity: .4; }
 .s-name { font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex: 1; }
@@ -412,7 +424,7 @@ header {
 .sc-dot.armed    { background: var(--pink); box-shadow: 0 0 5px var(--pink-glow); }
 .sc-dot.disarmed { background: var(--text-muted); }
 .sc-dot.disabled { background: var(--text-muted); opacity:.4; }
-.sc-dot.triggered { background: var(--red); box-shadow: 0 0 6px rgba(184,50,50,.6); animation: bub-trigger .5s infinite; }
+.sc-dot.triggered { background: var(--red); animation: bub-trigger .5s infinite; }
 .sc-name { font-size: 13px; font-weight: 600; flex: 1; }
 .sc-badge {
   font-family: var(--mono); font-size: 9px; padding: 2px 7px; border-radius: 10px;
@@ -1687,14 +1699,19 @@ function buildFloorplan() {
   });
 
   _cacheElements();
+  updateBeams();
 
   // 4. Bind position measurements and load listeners AFTER elements are in the DOM
   const base = document.getElementById('fp-base');
   base.onload = () => { resize(); _cacheElements(); };
   if (base.complete) { resize(); _cacheElements(); }
 
-  // Use window.onresize to cleanly overwrite previous listeners on rebuild
-  window.onresize = resize;
+  // Use window.onresize to cleanly overwrite previous listeners on rebuild with a light debounce
+  let resizeTimeout;
+  window.onresize = () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(resize, 60);
+  };
 }
 
 const _beamEls   = {};
