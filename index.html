@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/png" href="icons/favicon.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Steenbok Alarm Control</title>
@@ -91,6 +92,8 @@ header {
   display: flex; align-items: center; gap: 16px;
   padding: 0 20px; height: 48px; border-bottom: 1px solid var(--border);
   background: var(--bg2); flex-shrink: 0; user-select: none;
+  position: relative;
+  z-index: 10;
 }
 .logo { font-size: 13px; font-weight: 800; letter-spacing: 0.67em; text-transform: uppercase; color: var(--text); }
 .logo span { color: var(--pink); }
@@ -115,6 +118,8 @@ header {
 }
 .state-badge.DISARMED   { color: var(--green);  border-color: var(--green);  background: rgba(74,222,128,.08); }
 .state-badge.ARMED      { color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); }
+.state-badge.HOME_ARMED   { color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); }
+.state-badge.HOME_WARNING { color: var(--amber); border-color: var(--amber); background: rgba(251,191,36,.15); animation: pulse-pink 1s infinite; }
 .state-badge.ENTRY_DELAY{ color: var(--pink);  border-color: var(--pink);  background: var(--pink-soft); animation: pulse-pink 1s infinite; }
 .state-badge.ALARMING   { color: var(--red);    border-color: var(--red);    background: rgba(248,113,113,0.67); animation: pulse-red .6s infinite; }
 @keyframes pulse-pink   { 0%,100%{opacity:0.7} 50%{opacity:1} }
@@ -125,6 +130,8 @@ header {
   display: flex; gap: 2px; padding: 8px 20px 0;
   background: var(--bg2); border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 .tab {
   font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
@@ -162,33 +169,41 @@ header {
 .fp-wrap img.base {
   display: block; width: 100%; height: 100%;
   object-fit: contain;
+  border: none !important;
+  outline: none !important;
+}
+.fp-wrap, .fp-wrap img {
+  border: none !important;
+  outline: none !important;
 }
 [data-theme="dark"] .fp-wrap img.base {
   filter: invert(1);
 }
-[data-theme="dark"] .fp-wrap .beam-layer:not(.armed):not(.triggered) {
-  filter: grayscale(100%) brightness(0.55) invert(1);
-}
+
 .fp-wrap .beam-layer {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; pointer-events: none;
+  position: absolute; pointer-events: none;
   opacity: 0;
-  filter: grayscale(100%) brightness(0.55);
-  transition: filter .45s ease, opacity .45s ease;
+  background-color: var(--text-muted);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transition: opacity .3s ease, background-color .3s ease;
+  will-change: opacity, background-color;
 }
 .fp-wrap .beam-layer.positioned {
   opacity: var(--beam-inactive-alpha, 0.35);
 }
 .fp-wrap .beam-layer.armed.positioned {
-  filter: none;
+  background-color: var(--pink);
   opacity: 1;
 }
 .fp-wrap .beam-layer.triggered.positioned {
-  filter: sepia(1) saturate(8) hue-rotate(300deg) brightness(1.3);
+  background-color: var(--red);
   opacity: 1;
-  animation: beam-opacity-flash .5s infinite ease-in-out;
+  animation: beam-simple-flash .5s infinite ease-in-out;
 }
-@keyframes beam-opacity-flash {
+@keyframes beam-simple-flash {
   0%,100% { opacity: 0.35; }
   50%      { opacity: 1.0; }
 }
@@ -328,6 +343,7 @@ header {
 .sensor-bubble.triggered {
   background: var(--red); border-color: #FF4444;
   box-shadow: none;
+  animation: bub-trigger .5s infinite;
 }
 .sensor-bubble.triggered::before {
   animation: bub-trigger-composited .8s infinite ease-out;
@@ -364,9 +380,14 @@ header {
 }
 
 /* Arm/Disarm big buttons */
-.arm-row { display: flex; gap: 8px; }
-.btn-arm, .btn-disarm {
+.arm-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-arm {
   flex: 1; padding: 9px 0; border-radius: var(--radius);
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+  transition: all .2s;
+}
+.btn-disarm {
+  flex: 1 1 100%; padding: 9px 0; border-radius: var(--radius);
   font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
   transition: all .2s;
 }
@@ -498,12 +519,13 @@ header {
   flex: 1; max-width: 240px; font-size: 11px; padding: 4px 10px;
 }
 .log-body {
-  flex: 1; overflow-y: auto; padding: 8px 0; font-family: var(--mono); font-size: 10px;
+  flex: 1; overflow-y: auto; overflow-x: auto; padding: 8px 0; font-family: var(--mono); font-size: 10px;
 }
 .log-entry {
   display: flex; gap: 12px; padding: 4px 16px; line-height: 1.5;
   border-bottom: 1px solid rgba(255,255,255,.02);
   animation: fadeIn .15s ease;
+  min-width: max-content;
 }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-2px)} to{opacity:1;transform:none} }
 .log-ts  { color: var(--text-muted); flex-shrink: 0; }
@@ -512,7 +534,7 @@ header {
 .log-dir.tx { color: var(--amber); }
 .log-dir.sys { color: var(--text-muted); }
 .log-topic { color: var(--text-dim); flex-shrink: 0; min-width: 220px; }
-.log-msg   { color: var(--text); overflow-x: auto; min-width: 0; flex: 1; }
+.log-msg   { color: var(--text); }
 
 /* Prism JSON override styling - preserves single-line overflow scrolling without row-stretching */
 .log-msg pre {
@@ -528,7 +550,7 @@ header {
 
 /* ─── Setup / credentials overlay ────────────────────────────────── */
 #setup-overlay {
-  position: fixed; inset: 0; z-index: 100;
+  position: fixed; inset: 0; z-index: 300;
   background: rgba(10,10,12,.96); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
 }
@@ -568,7 +590,7 @@ header {
 
 /* Disable input modal */
 #disable-modal {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: 310;
   background: rgba(10,10,12,.8); display: none;
   align-items: center; justify-content: center;
 }
@@ -651,9 +673,21 @@ header {
   .config-right { overflow: visible !important; flex: none; padding: 12px; }
   #config-textarea { min-height: 200px; height: 40vh; }
 
-  #panel-sensors { overflow-y: auto; height: auto; flex: none; padding: 16px; }
-  #panel-log { height: auto; flex: none; }
-  .log-body { max-height: calc(100dvh - 160px); }
+  #panel-sensors {
+    overflow-y: auto !important;
+    height: auto !important;
+    flex: 1 !important;
+    padding: 16px;
+  }
+  #panel-log {
+    height: auto !important;
+    flex: 1 !important;
+  }
+  .log-body {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+  }
 
   #dev-toolbar {
     bottom: auto; top: 52px;
@@ -670,13 +704,13 @@ header {
     left: 12px !important;
     width: 10% !important;
     aspect-ratio: 1 !important;
-    z-index: 250 !important;
+    z-index: 35 !important;
   }
   #sos-confirm-box {
     position: absolute !important;
     top: 12px !important;
     left: calc(10% + 20px) !important;
-    z-index: 250 !important;
+    z-index: 35 !important;
   }
 }
 
@@ -718,10 +752,11 @@ header {
 }
 .stale-detail-card button:hover { border-color: var(--pink); color: var(--pink); }
 
-/* ─── Offline Warning Pop-up (40% width, blur backdrop, themed) ─── */
+/* ─── Offline Warning Pop-up (Responsive width, max-height bound, blur backdrop, themed) ─── */
 #offline-warning {
   display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 40%; background: var(--bg2); backdrop-filter: blur(4px); opacity: 0.95; border: 2px solid var(--amber);
+  width: 90%; max-width: 400px; max-height: 90%; overflow-y: auto;
+  background: var(--bg2); backdrop-filter: blur(4px); opacity: 0.95; border: 2px solid var(--amber);
   border-radius: 12px; padding: 16px; text-align: center; z-index: 100;
   box-shadow: 0 8px 32px rgba(0,0,0,.3); pointer-events: auto;
 }
@@ -778,6 +813,74 @@ header {
   cursor: pointer; pointer-events: auto; z-index: 151; box-shadow: -2px 2px 8px rgba(0,0,0,.2);
   font-size: 10px;
 }
+
+/* ─── Top Middle Notification Container ────────────────────────── */
+#gui-notification-container {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 500; display: flex; flex-direction: column; gap: 10px;
+  align-items: center; width: 90%; max-width: 420px; pointer-events: none;
+}
+.gui-notif-bubble {
+  pointer-events: auto; background: var(--bg2); border: 1px solid var(--red);
+  border-left: 4px solid var(--red); border-radius: 8px; padding: 12px 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3); display: flex; gap: 10px;
+  align-items: center; width: 100%; transition: opacity 0.3s, transform 0.3s;
+  opacity: 0; transform: translateY(-20px); cursor: pointer;
+}
+.gui-notif-bubble.show { opacity: 1; transform: translateY(0); }
+.gui-notif-icon { font-size: 16px; color: var(--red); flex-shrink: 0; }
+.gui-notif-body { flex: 1; min-width: 0; }
+.gui-notif-text { font-family: var(--mono); font-size: 11px; color: var(--text); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gui-notif-time { font-family: var(--mono); font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+.gui-notif-close { background: transparent; border: none; font-size: 14px; color: var(--text-muted); cursor: pointer; margin-left: 10px; line-height: 1; }
+.gui-notif-close:hover { color: var(--red); }
+
+/* Modal styling for expanded notification */
+#gui-notif-modal {
+  position: fixed; inset: 0; z-index: 510;
+  background: rgba(10,10,12,.85); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  padding: 16px;
+}
+#gui-notif-modal.open { display: flex; }
+.gui-notif-modal-card {
+  background: var(--bg2); border: 2px solid var(--red); border-radius: 12px;
+  padding: 24px; max-width: 440px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+.gui-notif-modal-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; color: var(--red); font-size: 16px; font-weight: bold; }
+.gui-notif-modal-body { font-family: var(--mono); font-size: 11px; color: var(--text); line-height: 1.6; margin-bottom: 20px; white-space: pre-wrap; word-break: break-all; }
+.gui-notif-modal-footer { display: flex; justify-content: flex-end; }
+</style>
+<style>
+
+</style>
+<style>
+body {
+    position: relative;
+    isolation: isolate; /* Forces z-index: -1 to render above body background, but below body text */
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    top: 10%;
+    left: 10%;
+    right: 10%;
+    bottom: 10%;
+    background-image: url("icons/logo.png");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.1;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Hide the logo when the status tab has the 'active' class */
+body:has(#panel-status.active)::before {
+    display:none;
+}
+
 </style>
 </head>
 <body>
@@ -801,7 +904,7 @@ const SENSOR_LOCATIONS = {
   "pir_container_power":     { x: 394, y: 420 },
   "pir_front_windows":       { x: 512, y: 381 },
   "pir_main_power":          { x: 667, y: 271 },
-  "power_sense":             { x: 655, y: 475 },
+  "power_sense":             { x: 640, y: 500 },
 };
 
 function initSensorConfigDefaults() {
@@ -810,7 +913,7 @@ function initSensorConfigDefaults() {
       id: id,
       name: id.replace(/_/g, ' ').replace(/ \w/g, c => c.toUpperCase()),
       type: 'pir',
-      beam: `beam${index + 1}.png`,
+      beam: `${id}.png`,
       x: SENSOR_LOCATIONS[id].x,
       y: SENSOR_LOCATIONS[id].y,
       zone: 'perimeter'
@@ -822,19 +925,11 @@ initSensorConfigDefaults();
 function updateSensorConfigFromDevice() {
   if (!deviceConfig || !deviceConfig.sensors) return;
   SENSOR_CONFIG.length = 0;
-  const typeCounters = {};
 
   Object.keys(deviceConfig.sensors).forEach(id => {
     const s = deviceConfig.sensors[id];
     const loc = SENSOR_LOCATIONS[id] || { x: 100, y: 100 };
-
-    let type = s.type || 'pir';
-    if (s.interface === 'wireless') {
-      type = 'wireless';
-    }
-    if (!typeCounters[type]) typeCounters[type] = 0;
-    typeCounters[type]++;
-    const beam = `${type}${typeCounters[type]}.png`;
+    const beam = `${id}.png`;
 
     SENSOR_CONFIG.push({
       id: id,
@@ -959,6 +1054,7 @@ function updateSensorConfigFromDevice() {
       <select id="rf-remote-cmd" style="width:100%;">
         <option value="arm_toggle">Arm Toggle</option>
         <option value="arm">Arm</option>
+        <option value="home_arm">Home Arm</option>
         <option value="disarm">Disarm</option>
         <option value="sos">SOS / Alarm</option>
       </select>
@@ -1032,7 +1128,7 @@ function updateSensorConfigFromDevice() {
         <div id="offline-warning">
           <div style="font-size:32px; color:var(--amber); margin-bottom:8px;">⚠️</div>
           <div style="font-size:12px; font-weight:bold; margin-bottom:6px; font-family:var(--mono);">OFFLINE WARNING</div>
-          <div style="font-size:10px; font-family:var(--mono); line-height:1.4; margin-bottom:12px; color:var(--text-dim);">Device heartbeat has stopped. It cannot be reached over the internet. Verify device is on by SMSing "status" to the alarm number.</div>
+          <div style="font-size:10px; font-family:var(--mono); line-height:1.4; margin-bottom:12px; color:var(--text-dim);">Device heartbeat has stopped. It cannot be reached over the internet. Verify device is on by SMSing "[4-digit pin] status" to the alarm number.</div>
           <button onclick="dismissOfflineWarning()" style="font-family:var(--mono); font-size:9px; padding:4px 10px; border-radius:4px; background:var(--amber); color:#000; border:none; cursor:pointer;">Dismiss</button>
         </div>
       </div>
@@ -1043,8 +1139,9 @@ function updateSensorConfigFromDevice() {
       <div class="ctrl-section">
         <h3>System Control</h3>
         <div class="arm-row">
-          <button class="btn-arm"    onclick="sendArm()">ARM</button>
           <button class="btn-disarm" onclick="sendDisarm()">DISARM</button>
+          <button class="btn-arm"    onclick="sendArm()">ARM</button>
+          <button class="btn-arm"    onclick="sendHomeArm()" style="background:var(--pink-soft); border-color:var(--pink);">HOME ARM</button>
         </div>
         <div class="pin-row">
           <input id="pin-input" type="password" placeholder="PIN (if required)" maxlength="8">
@@ -1057,6 +1154,7 @@ function updateSensorConfigFromDevice() {
         <div class="stat-row"><span class="stat-label">State</span>      <span class="stat-val" id="s-state">—</span></div>
         <div class="stat-row"><span class="stat-label">Source</span>     <span class="stat-val" id="s-source">—</span></div>
         <div class="stat-row"><span class="stat-label">Power</span>      <span class="stat-val" id="s-power">—</span></div>
+        <div class="stat-row"><span class="stat-label">WiFi</span>       <span class="stat-val" id="s-wifi">—</span></div>
         <div class="stat-row"><span class="stat-label">MQTT</span>       <span class="stat-val" id="s-mqtt">—</span></div>
         <div class="stat-row"><span class="stat-label">SD Free</span>    <span class="stat-val" id="s-sdfree">—</span></div>
         <div class="stat-row"><span class="stat-label">Uptime</span>     <span class="stat-val" id="s-uptime">—</span></div>
@@ -1089,7 +1187,7 @@ function updateSensorConfigFromDevice() {
       <h4 style="font-family:var(--mono); font-size:11px; margin-bottom:8px;">Add New Sensor</h4>
       <div style="margin-bottom:8px;">
         <label style="font-family:var(--mono); font-size:9px;">Sensor ID (unique)</label>
-        <input id="add-s-id" placeholder="e.g. pir_kitchen" type="text">
+        <input id="add-s-id" placeholder="e.g. pir_kitchen" type="text" oninput="document.getElementById('add-s-beam').placeholder = this.value ? this.value + '.png' : 'e.g. pir_kitchen.png'">
       </div>
       <div style="margin-bottom:8px;">
         <label style="font-family:var(--mono); font-size:9px;">Name</label>
@@ -1097,7 +1195,7 @@ function updateSensorConfigFromDevice() {
       </div>
       <div style="margin-bottom:8px;">
         <label style="font-family:var(--mono); font-size:9px;">Beam Image</label>
-        <input id="add-s-beam" placeholder="e.g. beam10.png" type="text">
+        <input id="add-s-beam" placeholder="e.g. pir_kitchen.png" type="text">
       </div>
       <div style="margin-bottom:8px;">
         <label style="font-family:var(--mono); font-size:9px;">Zone</label>
@@ -1117,19 +1215,12 @@ function updateSensorConfigFromDevice() {
 
   <!-- CONFIG -->
   <div class="panel" id="panel-config">
-    <div class="config-left">
-      <div class="config-nav-item active" data-section="full" onclick="selectConfigSection(this,'full')">Full config</div>
-      <div class="config-nav-item" data-section="sensors" onclick="selectConfigSection(this,'sensors')">Sensors</div>
-      <div class="config-nav-item" data-section="rules"   onclick="selectConfigSection(this,'rules')">Rules</div>
-      <div class="config-nav-item" data-section="mqtt"    onclick="selectConfigSection(this,'mqtt')">MQTT</div>
-      <div class="config-nav-item" data-section="gsm"     onclick="selectConfigSection(this,'gsm')">GSM</div>
-      <div class="config-nav-item" data-section="http"    onclick="selectConfigSection(this,'http')">HTTP / ntfy</div>
-      <div class="config-nav-item" data-section="alarm"   onclick="selectConfigSection(this,'alarm')">Alarm</div>
-      <div class="config-nav-item" data-section="channels" onclick="selectConfigSection(this,'channels')">Channels</div>
+    <div class="config-left" id="config-nav-list">
+      <div style="padding: 12px 20px; font-family: var(--mono); font-size: 10px; color: var(--text-muted);">Waiting for config…</div>
     </div>
     <div class="config-right">
       <div class="config-editor-header">
-        <h2 id="config-section-title">Full config</h2>
+        <h2 id="config-section-title">Configuration Section</h2>
         <button class="config-save-btn" onclick="publishConfig()">Publish to device ↑</button>
       </div>
       <pre style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); overflow:auto; margin:0; padding:14px;"><code id="config-textarea" class="language-json" contenteditable="true" spellcheck="false" style="display:block; outline:none; font-size:11px; line-height:1.7; font-family:var(--mono); min-height:100%;">Loading…</code></pre>
@@ -1142,7 +1233,7 @@ function updateSensorConfigFromDevice() {
   </div>
 
   <!-- EVENTS (Separate Events Log view) -->
-  <div class="panel" id="panel-events" style="flex-direction: column; padding: 20px; overflow-y: auto;">
+  <div class="panel" id="panel-events" style="flex-direction: column; padding: 20px; overflow: hidden;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
       <h2 style="font-size:16px;font-weight:800">System Events Log</h2>
       <div style="display:flex;gap:8px">
@@ -1150,7 +1241,7 @@ function updateSensorConfigFromDevice() {
         <button class="sc-btn" onclick="clearEventsList()">Clear Events View</button>
       </div>
     </div>
-    <div class="log-body" id="events-log-body" style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:10px; max-height:calc(100vh - 180px); overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column;"></div>
+    <div class="log-body" id="events-log-body" style="background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:10px; flex: 1; overflow-y:auto; overflow-x:auto; display:flex; flex-direction:column;"></div>
   </div>
 
   <!-- LOG -->
@@ -1442,7 +1533,12 @@ function connect() {
     client.subscribe(`status/${did}/actions`, { qos: 1 });
     client.subscribe(`status/${did}/events`, { qos: 1 });
     client.subscribe(`status/${did}/heartbeat`, { qos: 0 });
+    client.subscribe(`status/${did}/errors`, { qos: 1 });
     logRx('sys', 'subscribed', `status/${did}/# and alarm/${did}/#`);
+
+    // Automatically pull structural configuration slices on startup to build local visual components
+    publish(`cmd/${did}/config/get/sensors`, makePayload(), 1);
+    publish(`cmd/${did}/config/get/remotes`, makePayload(), 1);
   });
 
   client.on('message', (topic, payload) => {
@@ -1498,6 +1594,11 @@ function handleMessage(topic, raw) {
   // Actions stream
   if (topic.endsWith('/actions')) {
     addActionNotification(data);
+    return;
+  }
+
+  if (topic.endsWith('/errors')) {
+    showGuiNotification(data);
     return;
   }
 
@@ -1591,11 +1692,20 @@ function handleMessage(topic, raw) {
     if (data.ram_free) setStatVal('s-ram', `${Math.round(data.ram_free/1024)} KB`, 'green');
     setConnStatus('ok', credentials?.broker || '');
     if (data.power !== undefined || data.on_mains !== undefined) updatePowerStatus(data);
+    if (data.ssid !== undefined) {
+      setStatVal('s-wifi', data.ssid || 'disconnected', 'green');
+    }
 
-    // SD Card free space readout - parses free_kb or sd_free_kb
-    let freeKb = data.free_kb !== undefined ? data.free_kb : data.sd_free_kb;
-    if (freeKb !== undefined) {
-      setStatVal('s-sdfree', freeKb >= 0 ? `${Math.round(freeKb / 1024)} MB` : "not detected", 'green');
+    // SD Card free space readout - strictly parses sd_free_kb and formats units
+    let sdFreeKb = data.sd_free_kb;
+    if (sdFreeKb !== undefined && sdFreeKb >= 0) {
+      let displayVal = "";
+      if (sdFreeKb >= 1048576) {
+        displayVal = `${(sdFreeKb / 1048576).toFixed(2)} GB`;
+      } else {
+        displayVal = `${Math.round(sdFreeKb / 1024)} MB`;
+      }
+      setStatVal('s-sdfree', displayVal, 'green');
     } else {
       setStatVal('s-sdfree', "not detected", 'amber');
     }
@@ -1607,13 +1717,24 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Config echo
-  if (topic.endsWith('/config') || topic.endsWith('/config/current')) {
-    deviceConfig = data;
-    updateSensorConfigFromDevice();
+  // Config slice handler
+  if (topic.includes('/config/')) {
+    const parts = topic.split('/');
+    const section = parts[parts.length - 1];
+    if (!deviceConfig) deviceConfig = {};
+    deviceConfig[section] = data;
+
+    // Dynamically update dependent UI views on slice arrival
+    if (section === 'sensors') {
+      updateSensorConfigFromDevice();
+      buildSensorCards();
+    }
+    if (section === 'remotes') {
+      buildRemoteCards();
+    }
+
+    buildConfigNavigation();
     refreshConfigEditor();
-    buildSensorCards();
-    buildRemoteCards();
     return;
   }
 
@@ -1629,6 +1750,75 @@ function handleMessage(topic, raw) {
 function makePayload(extra = {}) {
   const token = credentials?.cmd_token || '';
   return { token, ...extra };
+}
+
+// ─── Image Crop & Layout Offset Auto-Calculator ──────────────────
+function cropAndOffsetBeam(imageSrc, callback) {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = imageSrc;
+
+  img.onload = () => {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    let xMin = w, xMax = 0, yMin = h, yMax = 0;
+    let hasPixels = false;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const alphaIndex = ((y * w) + x) * 4 + 3;
+        if (data[alphaIndex] > 0) {
+          hasPixels = true;
+          if (x < xMin) xMin = x;
+          if (x > xMax) xMax = x;
+          if (y < yMin) yMin = y;
+          if (y > yMax) yMax = y;
+        }
+      }
+    }
+
+    if (!hasPixels) {
+      callback({
+        dataUrl: imageSrc,
+        left: 0, top: 0, width: 100, height: 100
+      });
+      return;
+    }
+
+    const cropW = (xMax - xMin) + 1;
+    const cropH = (yMax - yMin) + 1;
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropW;
+    cropCanvas.height = cropH;
+    const cropCtx = cropCanvas.getContext('2d');
+    cropCtx.drawImage(canvas, xMin, yMin, cropW, cropH, 0, 0, cropW, cropH);
+
+    const croppedDataUrl = cropCanvas.toDataURL();
+
+    const leftPct = (xMin / w) * 100;
+    const topPct = (yMin / h) * 100;
+    const widthPct = (cropW / w) * 100;
+    const heightPct = (cropH / h) * 100;
+
+    callback({
+      dataUrl: croppedDataUrl,
+      left: leftPct,
+      top: topPct,
+      width: widthPct,
+      height: heightPct
+    });
+  };
 }
 
 // ─── Map Coordinates scaling alignment and coordinates update ──────
@@ -1673,24 +1863,30 @@ function buildFloorplan() {
       }
     });
 
-    document.querySelectorAll('.beam-layer').forEach(img => {
-      img.classList.add('positioned');
-    });
-
     scaleAlarmingText();
   }
 
   // 1. Remove existing layers and bubbles first
   wrap.querySelectorAll('.beam-layer, .sensor-bubble').forEach(el => el.remove());
 
-  // 2. Create beam layers
+  // 2. Create beam layers using dynamic cropping
   SENSOR_CONFIG.forEach(s => {
-    const img = document.createElement('img');
-    img.className = 'beam-layer';
-    img.src       = `beams/${s.beam}`;
-    img.dataset.id = s.id;
-    img.alt       = "";
-    wrap.appendChild(img);
+    const div = document.createElement('div');
+    div.className = 'beam-layer';
+    div.dataset.id = s.id;
+    wrap.appendChild(div);
+
+    cropAndOffsetBeam(`beams/${s.beam}`, (croppedData) => {
+      div.style.left = `${croppedData.left}%`;
+      div.style.top = `${croppedData.top}%`;
+      div.style.width = `${croppedData.width}%`;
+      div.style.height = `${croppedData.height}%`;
+
+      div.style.webkitMaskImage = `url(${croppedData.dataUrl})`;
+      div.style.maskImage = `url(${croppedData.dataUrl})`;
+
+      div.classList.add('positioned');
+    });
   });
 
   // 3. Create new sensor bubbles
@@ -1738,6 +1934,12 @@ function _cacheElements() {
 function sendArm() {
   const did = credentials?.device_id || 'diewesemoer';
   publish(`cmd/${did}/arm`, makePayload({ source: 'web' }), 1);
+  setArmPending(true);
+}
+
+function sendHomeArm() {
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/arm`, makePayload({ source: 'web', mode: 'home' }), 1);
   setArmPending(true);
 }
 
@@ -1994,17 +2196,23 @@ function addActionNotification(entry, animate = true) {
 //  UPDATE BEAM / BUBBLE STATES
 // ═══════════════════════════════════════════════════════════════════════════
 function updateBeams() {
-  const systemArmed   = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
+  const systemArmed   = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY' || alarmState === 'HOME_ARMED' || alarmState === 'HOME_WARNING');
   const isAlarming    = alarmState === 'ALARMING';
 
   const wrap = document.getElementById('fp-wrap');
-  if (wrap) wrap.classList.toggle('alarming', isAlarming);
+  if (wrap) {
+    wrap.classList.toggle('alarming', isAlarming);
+    const label = wrap.querySelector('.fp-alarming-label');
+    if (label) {
+      label.textContent = '⚠ Alarming';
+    }
+  }
 
   const nowS = Math.floor(Date.now() / 1000);
 
   SENSOR_CONFIG.forEach(s => {
     const st         = sensorStates[s.id] || {};
-    const active     = systemArmed && !st.disabled;
+    const active     = st.armed !== undefined ? !!st.armed : (systemArmed && !st.disabled);
     const triggered  = !!st.triggered;
     const stale      = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
     const isPower    = (s.type === 'power' || st.type === 'power');
@@ -2057,14 +2265,14 @@ function updateBeams() {
 function buildSensorCards() {
   const container = document.getElementById('sensor-cards');
   if (!container) return;
-  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING');
+  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY' || alarmState === 'HOME_ARMED' || alarmState === 'HOME_WARNING');
   const nowS = Math.floor(Date.now() / 1000);
 
   container.innerHTML = '';
   SENSOR_CONFIG.forEach(s => {
     const card = document.createElement('div');
     const st      = sensorStates[s.id] || {};
-    const active  = systemArmed && !st.disabled;
+    const active  = st.armed !== undefined ? !!st.armed : (systemArmed && !st.disabled);
     const stale   = st.last_seen ? (nowS - st.last_seen) > STALE_SENSOR_THRESHOLD_S : false;
     const isPower = (s.type === 'power' || st.type === 'power');
     const triggered = !!st.triggered;
@@ -2115,7 +2323,7 @@ function buildRemoteCards() {
     const card = document.createElement('div');
     card.className = 'sensor-card';
     const rData = remotes[rid] || {};
-    const commands = ['arm_toggle', 'arm', 'disarm', 'sos'];
+    const commands = ['arm_toggle', 'arm', 'home_arm', 'disarm', 'sos'];
     let cmdListHtml = '';
     commands.forEach(cmd => {
       const code = rData[cmd];
@@ -2143,7 +2351,7 @@ function buildRemoteCards() {
 function buildSidebarSensors(forceRebuild = false) {
   const container = document.getElementById('sidebar-sensors');
   if (!container) return;
-  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY');
+  const systemArmed = (alarmState === 'ARMED' || alarmState === 'ALARMING' || alarmState === 'ENTRY_DELAY' || alarmState === 'HOME_ARMED' || alarmState === 'HOME_WARNING');
   const nowS = Math.floor(Date.now() / 1000);
 
   if (forceRebuild) {
@@ -2172,7 +2380,7 @@ function buildSidebarSensors(forceRebuild = false) {
     const row    = container.querySelector(`[data-sid="${s.id}"]`);
     if (!row) return;
     const st      = sensorStates[s.id] || {};
-    const active  = systemArmed && !st.disabled;
+    const active  = st.armed !== undefined ? !!st.armed : (systemArmed && !st.disabled);
     const pending = pendingSensors.has(s.id);
     const isPower = (s.type === 'power' || st.type === 'power');
     const triggered = !!st.triggered;
@@ -2213,13 +2421,11 @@ function buildSidebarSensors(forceRebuild = false) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  CONFIG EDITOR
+//  CONFIG EDITOR (Programmatic Slice-Based Config)
 // ═══════════════════════════════════════════════════════════════════════════
 function selectConfigSection(el, section) {
-  document.querySelectorAll('.config-nav-item').forEach(n => n.classList.remove('active'));
-  el.classList.add('active');
+  // Safe helper fallback if referenced dynamically elsewhere
   configSection = section;
-  document.getElementById('config-section-title').textContent = el.textContent.trim();
   refreshConfigEditor();
 }
 
@@ -2227,8 +2433,63 @@ function selectConfigSection(el, section) {
 function requestConfig() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
-  publish(`cmd/${did}/config/get`, makePayload(), 1);
-  if (client?.connected) client.subscribe(`status/${did}/config`, { qos: 1 });
+  
+  // On-demand: strictly query only the active workspace slice to minimize network footprint
+  if (configSection && configSection !== 'full') {
+    publish(`cmd/${did}/config/get/${configSection}`, makePayload(), 1);
+  } else {
+    // Sequential fallback: pull individual slices dynamically
+    const slices = ["device", "wifi", "mqtt", "hardware", "gsm", "ntfy", "alarm", "channels", "rules", "sensors", "remotes"];
+    slices.forEach(s => {
+      publish(`cmd/${did}/config/get/${s}`, makePayload(), 1);
+    });
+  }
+}
+
+function buildConfigNavigation() {
+  const container = document.getElementById('config-nav-list');
+  if (!container || !deviceConfig) return;
+
+  // Clear "Waiting for config..." placeholder
+  container.innerHTML = '';
+
+  // Dynamically extract all first-level keys from the configuration dictionary (excluding any non-object metadata)
+  const keys = Object.keys(deviceConfig).filter(k => typeof deviceConfig[k] === 'object' && deviceConfig[k] !== null);
+
+  if (keys.length === 0) {
+    container.innerHTML = '<div style="padding: 12px 20px; font-family: var(--mono); font-size: 10px; color: var(--text-muted);">No valid config sections</div>';
+    return;
+  }
+
+  // Enforce section-only updates. Defensively reset configSection to first available key if it was "full" or invalid
+  if (!configSection || configSection === 'full' || !keys.includes(configSection)) {
+    configSection = keys[0];
+  }
+
+  keys.forEach(key => {
+    const item = document.createElement('div');
+    item.className = 'config-nav-item' + (key === configSection ? ' active' : '');
+    item.dataset.section = key;
+    
+    // Format UI labels cleanly (e.g. "mqtt" -> "Mqtt", "ntfy" -> "Ntfy")
+    const label = key.charAt(0).toUpperCase() + key.slice(1);
+    item.textContent = label;
+
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.config-nav-item').forEach(n => n.classList.remove('active'));
+      item.classList.add('active');
+      configSection = key;
+      document.getElementById('config-section-title').textContent = label;
+      refreshConfigEditor();
+    });
+
+    container.appendChild(item);
+  });
+
+  // Keep section title updated to match selection
+  const activeLabel = configSection.charAt(0).toUpperCase() + configSection.slice(1);
+  const titleEl = document.getElementById('config-section-title');
+  if (titleEl) titleEl.textContent = activeLabel;
 }
 
 function refreshConfigEditor() {
@@ -2238,12 +2499,13 @@ function refreshConfigEditor() {
     return;
   }
 
-  let data;
+  // Force defensive fallback if "full" somehow persisted
   if (configSection === 'full') {
-    data = deviceConfig;
-  } else {
-    data = deviceConfig[configSection] || {};
+    const keys = Object.keys(deviceConfig).filter(k => typeof deviceConfig[k] === 'object' && deviceConfig[k] !== null);
+    configSection = keys.length > 0 ? keys[0] : '';
   }
+
+  const data = deviceConfig[configSection] || {};
 
   // Set the text content of the code block
   ta.textContent = JSON.stringify(data, null, 2);
@@ -2261,20 +2523,19 @@ async function publishConfig() {
   const ta  = document.getElementById('config-textarea');
   let parsed;
   try {
-    // Reads textContent from the contenteditable DOM element
     parsed = JSON.parse(ta.textContent);
   }
   catch(e) { alert('Invalid JSON: ' + e.message); return; }
 
-  const did = credentials.device_id || 'diewesemoer';
-  const jsonStr = JSON.stringify(parsed);
-  const hashVal = await sha256(jsonStr);
-
   if (configSection === 'full') {
-    publish(`cmd/${did}/config/set`, makePayload({ config: parsed, sha256: hashVal }), 1);
-  } else {
-    publish(`cmd/${did}/config/set`, makePayload({ section: configSection, data: parsed, sha256: hashVal }), 1);
+    alert('Error: Publishing the full configuration is disabled. Please edit individual sections.');
+    return;
   }
+
+  const did = credentials.device_id || 'diewesemoer';
+  
+  // Deliver the modified slice data directly to cmd/ID/config/set/{section}
+  publish(`cmd/${did}/config/set/${configSection}`, makePayload(parsed), 1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2289,7 +2550,9 @@ function setAlarmState(state) {
   }
   setStatVal('s-state', state,
     state === 'DISARMED' ? 'green' :
-    state === 'ALARMING' ? 'red'   : 'pink');
+    state === 'ALARMING' ? 'red'   :
+    state === 'HOME_ARMED' ? 'pink' :
+    state === 'HOME_WARNING' ? 'amber' : 'pink');
 
   scaleAlarmingText();
 
@@ -2303,6 +2566,7 @@ function setAlarmState(state) {
   }
 }
 
+// ─── Manual SMS triggered text scaling ───────────────────────────
 function updateStateBadge(state) { setAlarmState(state || alarmState); }
 
 function updatePowerStatus(data) {
@@ -2490,8 +2754,12 @@ function toggleAddSensorForm() {
 function submitAddSensor() {
   const id = document.getElementById('add-s-id').value.trim();
   const name = document.getElementById('add-s-name').value.trim();
-  const beam = document.getElementById('add-s-beam').value.trim();
+  let beam = document.getElementById('add-s-beam').value.trim();
   const zone = document.getElementById('add-s-zone').value.trim();
+
+  if (!beam && id) {
+    beam = `${id}.png`;
+  }
 
   if (!id || !name || !beam) { alert('ID, Name, and Beam are required.'); return; }
 
@@ -2595,11 +2863,12 @@ function renderEventsList(entries) {
     const icon = getActionIcon(entry.type);
     const typeBadgeColor = getActionBorderColor(entry.type);
 
+    row.style.minWidth = 'max-content';
     row.innerHTML = `
       <span style="color:var(--text-muted); width:150px; flex-shrink:0;">${timeStr}</span>
       <span style="display:inline-block; width:24px; height:24px; text-align:center; line-height:24px; border-radius:50%; background:var(--bg3); flex-shrink:0;">${icon}</span>
       <span style="color:${typeBadgeColor}; font-weight:bold; width:120px; flex-shrink:0; text-transform:uppercase; font-size:10px;">${entry.type}</span>
-      <span style="color:var(--text); flex:1; min-width:0; overflow-x:auto; white-space:nowrap;" title="${escHtml(entry.msg)}">${escHtml(entry.msg)}</span>
+      <span style="color:var(--text); white-space:nowrap;" title="${escHtml(entry.msg)}">${escHtml(entry.msg)}</span>
     `;
     container.appendChild(row);
   });
@@ -2693,6 +2962,64 @@ function clearLog() {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showGuiNotification(data) {
+  const container = document.getElementById('gui-notification-container');
+  if (!container) return;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'gui-notif-bubble';
+  
+  const errorMsg = data.error || 'Unknown system error';
+  const timestamp = data.ts || new Date().toLocaleTimeString();
+
+  bubble.innerHTML = `
+    <div class="gui-notif-icon">⚠️</div>
+    <div class="gui-notif-body">
+      <div class="gui-notif-text">${escHtml(errorMsg)}</div>
+      <div class="gui-notif-time">${timestamp}</div>
+    </div>
+    <button class="gui-notif-close" onclick="event.stopPropagation(); this.parentElement.remove()">×</button>
+  `;
+
+  // Expand on bubble click
+  bubble.addEventListener('click', () => {
+    openGuiNotifModal(errorMsg, timestamp);
+    bubble.remove(); // Remove bubble on click
+  });
+
+  container.appendChild(bubble);
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    bubble.classList.add('show');
+  });
+
+  // Auto-dismiss after 20 seconds
+  setTimeout(() => {
+    if (bubble.parentElement) {
+      bubble.style.opacity = '0';
+      bubble.style.transform = 'translateY(-20px)';
+      setTimeout(() => bubble.remove(), 300);
+    }
+  }, 20000);
+}
+
+function openGuiNotifModal(msg, timestamp) {
+  const modal = document.getElementById('gui-notif-modal');
+  const textEl = document.getElementById('gui-notif-modal-text');
+  if (modal && textEl) {
+    textEl.textContent = `[${timestamp}] ${msg}`;
+    modal.classList.add('open');
+  }
+}
+
+function closeGuiNotifModal() {
+  const modal = document.getElementById('gui-notif-modal');
+  if (modal) {
+    modal.classList.remove('open');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2817,6 +3144,20 @@ function devToggleToolbar() {
   <div class="dev-sep"></div>
   <button class="dev-btn" onclick="devToggleToolbar()" style="opacity:.5">hide</button>
 </div>-->
+<!-- Top Middle Notification Container -->
+<div id="gui-notification-container"></div>
+
+<!-- Expanded Notification Modal -->
+<div id="gui-notif-modal">
+  <div class="gui-notif-modal-card">
+    <div class="gui-notif-modal-header">⚠️ Warning System Notification</div>
+    <div class="gui-notif-modal-body" id="gui-notif-modal-text"></div>
+    <div class="gui-notif-modal-footer">
+      <button class="sc-btn primary" onclick="closeGuiNotifModal()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ end dev toolbar ═══ -->
 </body>
 </html>
