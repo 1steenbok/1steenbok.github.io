@@ -1084,6 +1084,8 @@ function updateSensorConfigFromDevice() {
       <span id="conn-label">disconnected</span>
     </div>
     <span class="state-badge DISARMED" id="state-badge">DISARMED</span>
+    <!-- Obvious dynamic indicator showing when system power saving is active -->
+    <span id="powersave-badge" onclick="showPowerSaveInfoModal()" style="display:none; margin-left:8px; font-family:var(--mono); font-size:10px; font-weight:500; padding:3px 10px; border-radius:20px; border:1px solid var(--green); color:var(--green); background:rgba(74,222,128,.15); cursor:pointer;">🔋 POWER SAVE</span>
     <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">☀︎</button>
   </header>
 
@@ -1094,6 +1096,7 @@ function updateSensorConfigFromDevice() {
     <button class="tab" onclick="switchTab('events')">Events</button>
     <button class="tab" onclick="switchTab('log')">Log</button>
     <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
+    <button class="tab" onclick="switchTab('admin')">Admin</button>
   </div>
 
   <!-- STATUS -->
@@ -1232,11 +1235,13 @@ function updateSensorConfigFromDevice() {
     </div>
   </div>
 
-  <!-- EVENTS (Separate Events Log view) -->
+ <!-- EVENTS (Separate Events Log view) -->
   <div class="panel" id="panel-events" style="flex-direction: column; padding: 20px; overflow: hidden;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0;flex-wrap:wrap;gap:8px;">
       <h2 style="font-size:16px;font-weight:800">System Events Log</h2>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">Count:</label>
+        <input id="events-count" type="number" value="20" min="1" max="1000" style="width:65px;padding:4px 6px;height:28px;">
         <button class="sc-btn primary" onclick="requestEventsList()">Fetch Events List</button>
         <button class="sc-btn" onclick="clearEventsList()">Clear Events View</button>
       </div>
@@ -1246,19 +1251,103 @@ function updateSensorConfigFromDevice() {
 
   <!-- LOG -->
   <div class="panel" id="panel-log">
-    <div class="log-toolbar">
+    <div class="log-toolbar" style="flex-wrap:wrap;gap:10px;">
       <span style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">MQTT log</span>
       <input class="log-filter" id="log-filter" placeholder="Filter topics…" oninput="filterLog()">
       <label style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--text-muted);cursor:pointer">
         <input type="checkbox" id="log-autoscroll" checked> autoscroll
       </label>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">Count:</label>
+        <input id="sd-logs-count" type="number" value="50" min="1" max="1000" style="width:65px;padding:2px 4px;height:24px;">
+      </div>
       <button class="log-clear" onclick="requestSDLogs()">Fetch SD Logs</button>
       <button class="log-clear" onclick="clearLog()">Clear</button>
     </div>
     <div class="log-body" id="log-body"></div>
   </div>
+
+  <!-- ADMIN PANEL -->
+  <div class="panel" id="panel-admin" style="flex-direction: column; padding: 24px; overflow-y: auto;">
+    <h2 style="font-size:16px;font-weight:800;margin-bottom:16px;">Admin Control & Walk-Test</h2>
+    <div class="sensor-cards" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+
+      <!-- Walk Test Card -->
+      <div class="sensor-card">
+        <h3 style="margin-bottom:12px;">Walk-Test & Simulators</h3>
+        <div style="margin-bottom:10px;">
+          <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Select Sensor to Trip</label>
+          <select id="admin-trip-select" style="width:100%;"></select>
+        </div>
+        <button class="sc-btn primary" onclick="adminTripSensor()" style="width:100%; margin-bottom:12px;">Simulate Sensor Breach (Trip)</button>
+        <hr style="border:0; border-top:1px solid var(--border); margin:12px 0;">
+        <div style="margin-bottom:10px;">
+          <label style="font-family:var(--mono); font-size:9px; color:var(--text-dim); display:block; margin-bottom:4px;">Test Mode Duration</label>
+          <select id="admin-test-duration" style="width:100%;">
+            <option value="60">1 minute</option>
+            <option value="300" selected>5 minutes</option>
+            <option value="600">10 minutes (Max)</option>
+          </select>
+        </div>
+        <button class="sc-btn" onclick="adminActivateTestMode()" style="width:100%;">Activate Walk-Test (Brief Chirp Mode)</button>
+      </div>
+
+      <!-- Hardware Control Card -->
+      <div class="sensor-card">
+        <h3 style="margin-bottom:12px;">Hardware Interfaces</h3>
+        <button class="sc-btn" id="admin-powersave-btn" onclick="adminTogglePowerSave()" style="width:100%; margin-bottom:8px; color:var(--pink); border-color:var(--pink);">Activate Power Save</button>
+        <button class="sc-btn" onclick="adminRebootWifi()" style="width:100%; margin-bottom:8px;">Reboot WiFi Link</button>
+        <button class="sc-btn" onclick="adminRebootGsm()" style="width:100%; margin-bottom:8px;">Reboot GSM Modem</button>
+        <button class="sc-btn" onclick="adminRebootDevice()" style="width:100%; margin-bottom:8px; color:var(--red); border-color:var(--red);">Reboot Microcontroller</button>
+      </div>
+
+      <!-- Backup & Recovery Card -->
+      <div class="sensor-card">
+        <h3 style="margin-bottom:12px;">Backup & Crash Recoveries</h3>
+        <button class="sc-btn" onclick="adminRevertConfig()" style="width:100%; margin-bottom:12px;">Revert Config to Backup</button>
+        <hr style="border:0; border-top:1px solid var(--border); margin:12px 0;">
+        <button class="sc-btn danger" onclick="adminSimulateOom()" style="width:100%; background:var(--red); color:#fff; border-color:var(--red);">Simulate Out Of Memory (OOM) Crash</button>
+      </div>
+
+    </div>
+  </div>
 </div>
 
+<!-- Top Middle Notification Container -->
+<div id="gui-notification-container"></div>
+
+<!-- PowerSave Informational Modal -->
+<div id="powersave-info-modal" style="position:fixed; inset:0; z-index:510; background:rgba(10,10,12,.85); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; padding:16px;">
+  <div class="gui-notif-modal-card" style="border-color:var(--green);">
+    <div class="gui-notif-modal-header" style="color:var(--green);">Power Saving Mode Active</div>
+    <div class="gui-notif-modal-body"><p style="word-break: normal;overflow-wrap: normal;">The device is in battery-saving mode.
+
+⦿ Web controls are temporarily unavailable while the device's wifi antenna is asleep.
+
+⦿ The device turns on its wifi every 30 minutes to send status updates.
+
+⦿ Security monitoring remains active at all times, including sensors, RF remotes, and will respond to SMS text commands.
+
+⦿ If a sensor is triggered or an alarm occurs the device immediately wakes up and restores full connectivity.
+</p></div>
+    <div class="gui-notif-modal-footer">
+      <button class="sc-btn primary" onclick="closePowerSaveInfoModal()" style="border-color:var(--green); color:var(--green);">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Expanded Notification Modal -->
+<div id="gui-notif-modal">
+  <div class="gui-notif-modal-card">
+    <div class="gui-notif-modal-header">⚠️ Warning System Notification</div>
+    <div class="gui-notif-modal-body" id="gui-notif-modal-text" style="word-break: normal;overflow-wrap: normal;"></div>
+    <div class="gui-notif-modal-footer">
+      <button class="sc-btn primary" onclick="closeGuiNotifModal()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ end dev toolbar ═══ -->
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
 //  STATE
@@ -1269,6 +1358,7 @@ let alarmState   = "DISARMED";
 let sensorStates = {};     // sensor_id → {armed, disabled, last_seen}
 let deviceConfig = null;   // last full config received from device
 let logEntries   = [];
+let receivedEvents = [];   // Buffer for incoming events list chunks
 let configSection = "full";
 let disableTarget = null;
 let armPending   = false;  // waiting for MQTT to confirm ARM
@@ -1329,7 +1419,11 @@ function checkOfflineStatus() {
   const nowS = Math.floor(Date.now() / 1000);
   const popup = document.getElementById('offline-warning');
   const lastSeen = deviceLastSeenS || lastHeartbeatTimeS;
-  if (lastSeen && (nowS - lastSeen > 540)) {
+
+  // Heartbeat warning threshold is expanded to 1.1 hours (3960s) when power saving is active
+  const threshold = window.powerSaveActive ? 3960 : 540;
+
+  if (lastSeen && (nowS - lastSeen > threshold)) {
     if (popup) popup.style.display = 'block';
   } else {
     if (popup) popup.style.display = 'none';
@@ -1483,16 +1577,23 @@ function showSetupError(msg) {
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const panels = ['status','sensors','config','events','log','setup'];
+    const panels = ['status','sensors','config','events','log','setup','admin'];
     t.classList.toggle('active', panels[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if (name === 'setup') { showSetup(); return; }
   const p = document.getElementById('panel-' + name);
   if (p) p.classList.add('active');
-  if (name === 'sensors') { buildSensorCards(); buildRemoteCards(); }
+  if (name === 'sensors') {
+    buildSensorCards();
+    buildRemoteCards();
+    startSensorsUpdateTimer();
+  } else {
+    stopSensorsUpdateTimer();
+  }
   if (name === 'config')  requestConfig();
   if (name === 'events')  requestEventsList();
+  if (name === 'admin')   populateAdminTripDropdown();
 
   // Recalculate and adjust visual alignment and coordinates on return to the status view
   if (name === 'status') {
@@ -1501,7 +1602,6 @@ function switchTab(name) {
     });
   }
 }
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  MQTT CONNECTION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1530,6 +1630,7 @@ function connect() {
     client.subscribe(`alarm/${did}/#`,      { qos: 1 });
     client.subscribe(`status/${did}/armed`, { qos: 1 });
     client.subscribe(`status/${did}/zones`, { qos: 1 });
+    client.subscribe(`status/${did}/powersave`, { qos: 1 }); // PowerSave subscription
     client.subscribe(`status/${did}/actions`, { qos: 1 });
     client.subscribe(`status/${did}/events`, { qos: 1 });
     client.subscribe(`status/${did}/heartbeat`, { qos: 0 });
@@ -1602,13 +1703,15 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Events query results (Independent Event Log list)
-  if (topic.endsWith('/events')) {
-    if (data.entries && Array.isArray(data.entries)) {
-      renderEventsList(data.entries);
+
+    // Events query results (Independent Event Log list)
+    if (topic.endsWith('/events')) {
+      if (data.entries && Array.isArray(data.entries)) {
+        renderEventsList(data.entries, data.index === 0);
+      }
+      return;
     }
-    return;
-  }
+
 
   // Batched SD Card logs (SD Logs get) (resolves [object Object] issue by formatting parsed objects)
   if (topic.endsWith('/log')) {
@@ -1652,15 +1755,40 @@ function handleMessage(topic, raw) {
     return;
   }
 
-  // Zone / sensor states
+// Zone / sensor states
   if (topic.endsWith('/zones') || topic.endsWith('/sensor_states')) {
     if (typeof data === 'object' && !data.raw) {
       Object.keys(data).forEach(sid => pendingSensors.delete(sid));
-      Object.assign(sensorStates, data);
+
+      // Safely merge properties so we don't accidentally wipe out local disabled_until prediction
+      Object.keys(data).forEach(sid => {
+        if (!sensorStates[sid]) sensorStates[sid] = {};
+        const oldUntil = sensorStates[sid].disabled_until;
+
+        Object.assign(sensorStates[sid], data[sid]);
+
+        // If still disabled, restore local prediction if the incoming packet omitted it
+        if (sensorStates[sid].disabled && oldUntil && !data[sid].disabled_until) {
+          sensorStates[sid].disabled_until = oldUntil;
+        }
+      });
+
       updateBeams();
       buildSidebarSensors();
       buildSensorCards();
     }
+    return;
+  }
+
+  if (topic.endsWith('/powersave')) {
+    const isPowerSave = (raw === 'on');
+    setPowerSaveUI(isPowerSave);
+    return;
+  }
+
+  if (topic.endsWith('/powersave')) {
+    const isPowerSave = (raw === 'on');
+    setPowerSaveUI(isPowerSave);
     return;
   }
 
@@ -1932,12 +2060,14 @@ function _cacheElements() {
 }
 
 function sendArm() {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
   const did = credentials?.device_id || 'diewesemoer';
   publish(`cmd/${did}/arm`, makePayload({ source: 'web' }), 1);
   setArmPending(true);
 }
 
 function sendHomeArm() {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
   const did = credentials?.device_id || 'diewesemoer';
   publish(`cmd/${did}/arm`, makePayload({ source: 'web', mode: 'home' }), 1);
   setArmPending(true);
@@ -1945,6 +2075,7 @@ function sendHomeArm() {
 
 // ─── Control execution logic ──────────────────────────────────────
 function sendDisarm() {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
   const did  = credentials?.device_id || 'diewesemoer';
   const pin  = document.getElementById('pin-input').value.trim();
   publish(`cmd/${did}/disarm`, makePayload({ source: 'web', code: pin || undefined }), 1);
@@ -1982,6 +2113,7 @@ function sendArmAll() { sendArm(); }
 function sendDisarmAll() { sendDisarm(); }
 
 function toggleSensor(sensorId) {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
   const st  = sensorStates[sensorId] || {};
   const did = credentials?.device_id || 'diewesemoer';
   if (st.disabled) {
@@ -2010,8 +2142,39 @@ function confirmDisable() {
   const duration = parseInt(document.getElementById('dm-dur').value);
   publish(`cmd/${did}/sensor/disable`,
     makePayload({ sensor_id: disableTarget, duration_s: duration }), 1);
+
+  if (duration > 0) {
+    if (!sensorStates[disableTarget]) sensorStates[disableTarget] = {};
+    sensorStates[disableTarget].disabled = true;
+    sensorStates[disableTarget].disabled_until = Math.floor(Date.now() / 1000) + duration;
+  } else {
+    if (sensorStates[disableTarget]) {
+      sensorStates[disableTarget].disabled = true;
+      delete sensorStates[disableTarget].disabled_until;
+    }
+  }
+
+  buildSensorCards(); // Render the new "Until Re-enable" block immediately
   markPending(disableTarget);
   closeDisableModal();
+}
+
+function toggleSensor(sensorId) {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
+  const st  = sensorStates[sensorId] || {};
+  const did = credentials?.device_id || 'diewesemoer';
+  if (st.disabled) {
+    publish(`cmd/${did}/sensor/enable`, makePayload({ sensor_id: sensorId }), 1);
+    if (sensorStates[sensorId]) {
+      sensorStates[sensorId].disabled = false;
+      delete sensorStates[sensorId].disabled_until;
+    }
+    buildSensorCards(); // Remove countdown instantly
+  } else {
+    openDisableModal(sensorId);
+    return;
+  }
+  markPending(sensorId);
 }
 
 const pendingSensors = new Set();
@@ -2243,9 +2406,9 @@ function updateBeams() {
     }
   });
 
-  const sosBtn = document.getElementById('sos-btn');
+    const sosBtn = document.getElementById('sos-btn');
   if (sosBtn) {
-    sosBtn.style.display = isAlarming ? 'none' : 'block';
+    sosBtn.style.display = (isAlarming || window.powerSaveActive) ? 'none' : 'block';
     if (isAlarming) clearSOSPending();
   }
 
@@ -2283,11 +2446,18 @@ function buildSensorCards() {
     const hasCode = rfCodes && rfCodes.length > 0;
     const rfDisplay = hasCode
       ? rfCodes.map(code => `0x${Number(code).toString(16).toUpperCase()}`).join(', ')
-      : '<span style="color:var(--red); font-weight:bold;">no sensor code learned for this entry</span>';
+      : '<span style="color:var(--red); font-weight:bold;">no code learned</span>';
 
     const stClass = st.disabled ? 'disabled' : isTriggeredToShow ? 'triggered' : active ? 'armed' : 'disarmed';
     card.className   = `sensor-card ${stClass}${!hasCode ? ' disabled' : ''}`;
     card.dataset.sid = s.id;
+
+    let expiryHtml = '';
+    if (st.disabled && st.disabled_until) {
+      let disabledUntil = st.disabled_until;
+      if (disabledUntil > 9999999999) disabledUntil = Math.floor(disabledUntil / 1000);
+      expiryHtml = `<br><span class="sc-re-enable" data-until="${disabledUntil}">Until Re-enable: ${new Date(disabledUntil * 1000).toLocaleString()} <span class="re-enable-countdown"></span></span>`;
+    }
 
     card.innerHTML = `
       <div class="sc-header">
@@ -2299,7 +2469,7 @@ function buildSensorCards() {
         ID: ${s.id}<br>
         Beam: beams/${s.beam}<br>
         RF Code: ${rfDisplay}<br>
-        Last Seen: ${st.last_seen ? `${new Date(st.last_seen*1000).toLocaleString()} ${timeAgo(st.last_seen)}` : 'never'}<br>
+        Last Seen: <span class="sc-last-seen" data-ts="${st.last_seen || ''}">${st.last_seen ? `${new Date(st.last_seen*1000).toLocaleString()} <span class="last-seen-ago">${timeAgo(st.last_seen)}</span>` : 'never'}</span>${expiryHtml}<br>
         Status: ${st.disabled ? '⊘ disabled' : isTriggeredToShow ? '● triggered' : active ? '● armed' : '○ inactive'}${stale ? '<br><span style="color:var(--amber)">⚠ Stale sensor</span>' : ''}
       </div>
       <div class="sc-actions" data-role="actions">
@@ -2433,44 +2603,50 @@ function selectConfigSection(el, section) {
 function requestConfig() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
-  
-  // On-demand: strictly query only the active workspace slice to minimize network footprint
-  if (configSection && configSection !== 'full') {
-    publish(`cmd/${did}/config/get/${configSection}`, makePayload(), 1);
-  } else {
-    // Sequential fallback: pull individual slices dynamically
-    const slices = ["device", "wifi", "mqtt", "hardware", "gsm", "ntfy", "alarm", "channels", "rules", "sensors", "remotes"];
-    slices.forEach(s => {
-      publish(`cmd/${did}/config/get/${s}`, makePayload(), 1);
-    });
+
+  // Request the currently active section. If 'full' or invalid, default to 'device'
+  if (!configSection || configSection === 'full') {
+    configSection = 'device';
   }
+  publish(`cmd/${did}/config/get/${configSection}`, makePayload(), 1);
 }
 
 function buildConfigNavigation() {
   const container = document.getElementById('config-nav-list');
-  if (!container || !deviceConfig) return;
+  if (!container) return;
 
-  // Clear "Waiting for config..." placeholder
+  // Clear previous list
   container.innerHTML = '';
 
-  // Dynamically extract all first-level keys from the configuration dictionary (excluding any non-object metadata)
-  const keys = Object.keys(deviceConfig).filter(k => typeof deviceConfig[k] === 'object' && deviceConfig[k] !== null);
+  // Statically list all supported slices to ensure they are always present in the sidebar
+  const sections = [
+    "device",
+    "wifi",
+    "mqtt",
+    "hardware",
+    "gsm",
+    "ntfy",
+    "alarm",
+    "rules",
+    "sensors",
+    "remotes",
+    "health",
+    "logs",
+    "powersave",
+    "ntp",
+    "ota",
+    "channels"
+  ];
 
-  if (keys.length === 0) {
-    container.innerHTML = '<div style="padding: 12px 20px; font-family: var(--mono); font-size: 10px; color: var(--text-muted);">No valid config sections</div>';
-    return;
+  if (!configSection || configSection === 'full' || !sections.includes(configSection)) {
+    configSection = sections[0];
   }
 
-  // Enforce section-only updates. Defensively reset configSection to first available key if it was "full" or invalid
-  if (!configSection || configSection === 'full' || !keys.includes(configSection)) {
-    configSection = keys[0];
-  }
-
-  keys.forEach(key => {
+  sections.forEach(key => {
     const item = document.createElement('div');
     item.className = 'config-nav-item' + (key === configSection ? ' active' : '');
     item.dataset.section = key;
-    
+
     // Format UI labels cleanly (e.g. "mqtt" -> "Mqtt", "ntfy" -> "Ntfy")
     const label = key.charAt(0).toUpperCase() + key.slice(1);
     item.textContent = label;
@@ -2480,6 +2656,10 @@ function buildConfigNavigation() {
       item.classList.add('active');
       configSection = key;
       document.getElementById('config-section-title').textContent = label;
+
+      // On-demand request for selected section slice
+      const did = credentials?.device_id || 'diewesemoer';
+      publish(`cmd/${did}/config/get/${configSection}`, makePayload(), 1);
       refreshConfigEditor();
     });
 
@@ -2533,15 +2713,69 @@ async function publishConfig() {
   }
 
   const did = credentials.device_id || 'diewesemoer';
-  
+
   // Deliver the modified slice data directly to cmd/ID/config/set/{section}
   publish(`cmd/${did}/config/set/${configSection}`, makePayload(parsed), 1);
+}
+
+// ─── SENSORS TAB DYNAMIC RUNTIME UPDATES ───────────────────────────
+let sensorsUpdateTimer = null;
+
+function startSensorsUpdateTimer() {
+  if (sensorsUpdateTimer) return;
+  updateSensorsTabTicks(); // First run instantly
+  sensorsUpdateTimer = setInterval(updateSensorsTabTicks, 1000);
+}
+
+function stopSensorsUpdateTimer() {
+  if (sensorsUpdateTimer) {
+    clearInterval(sensorsUpdateTimer);
+    sensorsUpdateTimer = null;
+  }
+}
+
+function updateSensorsTabTicks() {
+  const nowS = Math.floor(Date.now() / 1000);
+
+  // Update Countdown timers for temporarily disabled sensors
+  document.querySelectorAll('.sc-re-enable').forEach(el => {
+    const untilS = parseInt(el.dataset.until || '0');
+    const countdownEl = el.querySelector('.re-enable-countdown');
+    if (!countdownEl) return;
+
+    if (untilS > nowS) {
+      const diff = untilS - nowS;
+      const hours = Math.floor(diff / 3600);
+      const mins = Math.floor((diff % 3600) / 60);
+      const secs = diff % 60;
+
+      let parts = [];
+      if (hours > 0) parts.push(`${hours}h`);
+      if (mins > 0 || hours > 0) parts.push(`${mins}m`);
+      parts.push(`${secs}s`);
+
+      countdownEl.textContent = `[${parts.join(' ')}]`;
+    } else {
+      countdownEl.textContent = '(expired)';
+    }
+  });
+
+  // Dynamically update relative Last Seen times on active visual cards
+  document.querySelectorAll('.sc-last-seen').forEach(el => {
+    const tsS = parseInt(el.dataset.ts || '0');
+    if (!tsS) return;
+    const agoEl = el.querySelector('.last-seen-ago');
+    if (agoEl) {
+      agoEl.textContent = timeAgo(tsS);
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  STATE HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 function setAlarmState(state) {
+  if (alarmState === state) return; // Prevent redundant updates and costly network request storms
   alarmState = state;
   const badge = document.getElementById('state-badge');
   if (badge) {
@@ -2553,13 +2787,7 @@ function setAlarmState(state) {
     state === 'ALARMING' ? 'red'   :
     state === 'HOME_ARMED' ? 'pink' :
     state === 'HOME_WARNING' ? 'amber' : 'pink');
-
-  scaleAlarmingText();
-
-  if (state === 'ALARMING') {
-    const did = credentials?.device_id || 'diewesemoer';
-    publish(`cmd/${did}/events/get`, makePayload({ alarm: true }), 1);
-  }
+   scaleAlarmingText();
 
   if (state === 'DISARMED' && lastSource !== 'auto_disarm') {
     clearActionNotifications();
@@ -2628,6 +2856,165 @@ function setStatVal(id, val, cls) {
   el.className   = 'stat-val' + (cls ? ' ' + cls : '');
 }
 
+function setPowerSaveUI(isPowerSave) {
+  window.powerSaveActive = isPowerSave;
+  const badge = document.getElementById('powersave-badge');
+  if (badge) {
+    badge.style.display = isPowerSave ? 'inline-block' : 'none';
+  }
+  const sosBtn = document.getElementById('sos-btn');
+  if (sosBtn) {
+    // Hide SOS button when power saving is active, or during Alarming state
+    sosBtn.style.display = (isPowerSave || alarmState === 'ALARMING') ? 'none' : 'block';
+  }
+  const psBtn = document.getElementById('admin-powersave-btn');
+  if (psBtn) {
+    psBtn.textContent = isPowerSave ? 'Deactivate Power Save' : 'Activate Power Save';
+    psBtn.style.borderColor = isPowerSave ? 'var(--green)' : 'var(--pink)';
+    psBtn.style.color = isPowerSave ? 'var(--green)' : 'var(--pink)';
+  }
+  checkOfflineStatus();
+}
+
+// ─── RF Learner Logic ─────────────────────────────────────────────
+function populateRfSensorDropdown() {
+  const select = document.getElementById('rf-sensor-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Choose Sensor --</option>';
+
+  SENSOR_CONFIG.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    select.appendChild(opt);
+  });
+}
+
+function populateAdminTripDropdown() {
+  const select = document.getElementById('admin-trip-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Choose Sensor --</option>';
+  SENSOR_CONFIG.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    select.appendChild(opt);
+  });
+}
+
+function adminTripSensor() {
+  const select = document.getElementById('admin-trip-select');
+  if (!select || !select.value) { alert('Select a sensor first!'); return; }
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/trip`, makePayload({ sensor_id: select.value }), 1);
+  sysLog(`Admin: Simulated trip sent for sensor: ${select.value}`);
+}
+
+function adminActivateTestMode() {
+  const select = document.getElementById('admin-test-duration');
+  const timeout = parseInt(select?.value || '300', 10);
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/test_mode`, makePayload({ timeout_s: timeout }), 1);
+  sysLog(`Admin: Requested Walk-Test chirp mode for ${timeout}s`);
+}
+
+function adminRebootWifi() {
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/reboot_wifi`, makePayload(), 1);
+  sysLog('Admin: Requested WiFi Interface Reboot');
+}
+
+function adminRebootGsm() {
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/reboot_gsm`, makePayload(), 1);
+  sysLog('Admin: Requested GSM Modem Module Reboot');
+}
+
+function adminRebootDevice() {
+  if (!confirm('Are you sure you want to reboot the entire system?')) return;
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/reboot`, makePayload(), 1);
+  sysLog('Admin: Requested system reset');
+}
+
+function adminRevertConfig() {
+  if (!confirm('Revert active config to backup configuration file and reboot?')) return;
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/revert_config`, makePayload(), 1);
+  sysLog('Admin: Requested config rollback recovery');
+}
+
+function adminSimulateOom() {
+  if (!confirm('WARNING: This will instantly trigger an out-of-memory exception and reboot the MCU. Proceed?')) return;
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/admin/sim_oom`, makePayload(), 1);
+  sysLog('Admin: Triggering simulated OOM crash exception');
+}
+
+function adminTogglePowerSave() {
+  const nextState = window.powerSaveActive ? 'off' : 'on';
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/powersave/set`, makePayload({ state: nextState }), 1);
+  sysLog(`Admin: Requested Power Save State -> ${nextState.toUpperCase()}`);
+}
+
+function setPowerSaveUI(isPowerSave) {
+  window.powerSaveActive = isPowerSave;
+  const badge = document.getElementById('powersave-badge');
+  if (badge) {
+    badge.style.display = isPowerSave ? 'inline-block' : 'none';
+  }
+  const sosBtn = document.getElementById('sos-btn');
+  if (sosBtn) {
+    // Hide SOS button when power saving is active, or during Alarming state
+    sosBtn.style.display = (isPowerSave || alarmState === 'ALARMING') ? 'none' : 'block';
+  }
+  const psBtn = document.getElementById('admin-powersave-btn');
+  if (psBtn) {
+    psBtn.textContent = isPowerSave ? 'Deactivate Power Save' : 'Activate Power Save';
+    psBtn.style.borderColor = isPowerSave ? 'var(--green)' : 'var(--pink)';
+    psBtn.style.color = isPowerSave ? 'var(--green)' : 'var(--pink)';
+  }
+  checkOfflineStatus();
+}
+
+function adminSimulateOom() {
+  if (!confirm('WARNING: This will instantly trigger an out-of-memory exception and reboot the MCU. Proceed?')) return;
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/sim_oom`, makePayload(), 1);
+  sysLog('Admin: Triggering simulated OOM crash exception');
+}
+
+function adminTogglePowerSave() {
+  const nextState = window.powerSaveActive ? 'off' : 'on';
+  const did = credentials?.device_id || 'diewesemoer';
+
+  // Publish the state change command with persistent timestamp
+  publish(`cmd/${did}/powersave/set`, makePayload({
+    state: nextState,
+    ts: Math.floor(Date.now() / 1000)
+  }), 1);
+  sysLog(`Admin: Requested Power Save State -> ${nextState.toUpperCase()}`);
+
+  if (window.powerSaveActive) {
+    // Trigger a central notification explaining that deactivation will take effect at the next check-in
+    showGuiNotification({
+      error: "Deactivation command sent. Power save deactivation will take effect the next time the device checks in over WiFi (up to 30 minutes).",
+      ts: new Date().toLocaleTimeString()
+    });
+  }
+}
+
+function showPowerSaveInfoModal() {
+  const modal = document.getElementById('powersave-info-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePowerSaveInfoModal() {
+  const modal = document.getElementById('powersave-info-modal');
+  if (modal) modal.style.display = 'none';
+}
+
 // ─── Dynamic Alarming text scaling ───────────────────────────────
 function scaleAlarmingText() {
   const label = document.querySelector('.fp-alarming-label');
@@ -2646,25 +3033,6 @@ function scaleAlarmingText() {
   }
   const targetFontSize = 0.4 * wrapWidth * alarmTextRatioCache;
   label.style.fontSize = `${targetFontSize}px`;
-}
-
-// ─── RF Learner Logic ─────────────────────────────────────────────
-function populateRfSensorDropdown() {
-  const select = document.getElementById('rf-sensor-select');
-  if (!select) return;
-  select.innerHTML = '<option value="">-- Choose Sensor --</option>';
-
-  SENSOR_CONFIG.forEach(s => {
-    const remoteSensor = deviceConfig?.sensors?.[s.id];
-    const codes = remoteSensor?.codes || (remoteSensor?.code ? [remoteSensor.code] : []);
-    const hasCode = codes && codes.length > 0;
-    if (!hasCode) {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = s.name;
-      select.appendChild(opt);
-    }
-  });
 }
 
 function openRfLearnModal() {
@@ -2791,7 +3159,9 @@ function submitAddSensor() {
 function requestEventsList() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
-  publish(`cmd/${did}/events/get`, makePayload({ count: 150 }), 1);
+  const countInput = document.getElementById('events-count');
+  const count = countInput ? (parseInt(countInput.value, 10) || 150) : 150;
+  publish(`cmd/${did}/events/get`, makePayload({ count: count }), 1);
 }
 
 // ─── Events list mapping and formatting ───────────────────────────
@@ -2800,22 +3170,37 @@ function clearEventsList() {
   if (container) container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">Log cleared. Click Fetch to retrieve.</div>';
 }
 
-function renderEventsList(entries) {
+
+function renderEventsList(entries, clearContainer = true) {
   const container = document.getElementById('events-log-body');
   if (!container) return;
+
+  if (clearContainer) {
+    receivedEvents = [];
+    container.innerHTML = '';
+  }
+
+  // Append new entries to the accumulator
+  receivedEvents.push(...entries);
+
+  // Sort globally: latest to oldest (timestamp descending)
+  receivedEvents.sort((a, b) => b.t - a.t);
+
+  // Clear container for fresh re-render
   container.innerHTML = '';
-  if (!entries || entries.length === 0) {
+
+  if (receivedEvents.length === 0) {
     container.innerHTML = '<div style="font-family:var(--mono); font-size:11px; color:var(--text-muted); padding:10px; text-align:center;">No events recorded. Click Fetch to retrieve.</div>';
     return;
   }
 
   let prevTimeS = null;
-  entries.forEach(entry => {
+  receivedEvents.forEach(entry => {
     const tVal = Number(entry.t || 0);
 
-    // Inject a visual spacer with computed duration gap if time between events exceeds 10 minutes (600 seconds)
     if (prevTimeS !== null) {
-      const diffS = tVal - prevTimeS;
+      // In descending order, prevTimeS is newer (larger) than tVal (older/smaller)
+      const diffS = prevTimeS - tVal;
       if (diffS > 600) {
         let gapText = '';
         if (diffS < 3600) {
@@ -2889,9 +3274,10 @@ function setConnStatus(type, label) {
 function requestSDLogs() {
   if (!credentials) return;
   const did = credentials.device_id || 'diewesemoer';
-  publish(`cmd/${did}/logs/get`, makePayload({ count: 200 }), 1);
+  const countInput = document.getElementById('sd-logs-count');
+  const count = countInput ? (parseInt(countInput.value, 10) || 200) : 200;
+  publish(`cmd/${did}/logs/get`, makePayload({ count: count }), 1);
 }
-
 // ─── Raw Log Actions ──────────────────────────────────────────────
 const MAX_LOG = 400;
 
@@ -2902,6 +3288,7 @@ function logRx(dir, topic, msg) {
   appendLogEntry({ ts, dir, topic, msg });
 }
 
+// Dev heartbeats
 function sysLog(msg) { logRx('sys', 'system', msg); }
 
 function highlightLogMsg(msg) {
@@ -2970,7 +3357,7 @@ function showGuiNotification(data) {
 
   const bubble = document.createElement('div');
   bubble.className = 'gui-notif-bubble';
-  
+
   const errorMsg = data.error || 'Unknown system error';
   const timestamp = data.ts || new Date().toLocaleTimeString();
 
@@ -3027,6 +3414,7 @@ function closeGuiNotifModal() {
 // ═══════════════════════════════════════════════════════════════════════════
 function devDid() { return credentials?.device_id || 'diewesemoer'; }
 
+// simulated trip
 function devEmit(topic, payload) {
   const raw = JSON.stringify(payload);
   logRx('rx', `[DEV] ${topic}`, raw);
