@@ -14,6 +14,7 @@
 })();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1390.0/aws-sdk.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <!-- Prism Syntax Highlighting -->
@@ -278,12 +279,12 @@ header {
 [data-theme="dark"] .sensor-warn.stale::after { background: rgba(251,191,36,.10); }
 .sensor-warn.defective {
   display: block;
-  background: rgba(184,50,50,.10);
+  background: var(--bg2);
   border: 1px solid var(--red);
   color: var(--red);
 }
 .sensor-warn.defective::after {
-  background: rgba(184,50,50,.10);
+  background: var(--bg2);
   border-right: 1px solid var(--red);
   border-bottom: 1px solid var(--red);
 }
@@ -364,8 +365,16 @@ header {
 .bub-icon {
   width: 8px; height: 8px;
   background: rgba(255,255,255,.8);
-  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
   opacity: .4; transition: opacity .25s;
+}
+.bub-icon.pir {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+.bub-icon.laser {
+  clip-path: polygon(0% 20%, 30% 20%, 30% 45%, 100% 45%, 100% 55%, 30% 55%, 30% 80%, 0% 80%);
+}
+.bub-icon.power {
+  clip-path: polygon(60% 0%, 20% 50%, 50% 50%, 40% 100%, 80% 45%, 50% 45%);
 }
 
 /* Controls sidebar */
@@ -899,12 +908,13 @@ const SENSOR_LOCATIONS = {
   "pir_main_geyser":         { x: 455, y: 221 },
   "pir_main_stoep":          { x: 556, y: 298 },
   "pir_container_stoep":     { x: 433, y: 311 },
-  "pir_container_fence":     { x: 288, y: 312 },
+  "pir_container_fence":     { x: 281, y: 263 },
   "pir_main_hallway":        { x: 450, y: 288 },
   "pir_container_power":     { x: 394, y: 420 },
   "pir_front_windows":       { x: 512, y: 381 },
   "pir_main_power":          { x: 667, y: 271 },
-  "power_sense":             { x: 640, y: 500 },
+  "power_sense":             { x: 590, y: 350 },
+  "laser_house":             { x: 562, y: 240 }
 };
 
 function initSensorConfigDefaults() {
@@ -971,6 +981,19 @@ function updateSensorConfigFromDevice() {
       <label>WebSocket port (usually 8884)</label>
       <input id="f-port" placeholder="8884" type="number" value="8884">
     </div>
+    <div class="setup-field" style="display: flex; gap: 12px;">
+      <div style="flex: 1;">
+        <label>Protocol</label>
+        <select id="f-proto">
+          <option value="wss" selected>wss:// (Secure)</option>
+          <option value="ws">ws:// (Unsecure)</option>
+        </select>
+      </div>
+      <div style="flex: 1.5;">
+        <label>WebSocket Path</label>
+        <input id="f-path" placeholder="/mqtt" type="text" value="/mqtt">
+      </div>
+    </div>
     <div class="setup-field">
       <label>Username</label>
       <input id="f-user" placeholder="alarm_user" type="text">
@@ -986,6 +1009,23 @@ function updateSensorConfigFromDevice() {
     <div class="setup-field">
       <label>Command token</label>
       <input id="f-token" placeholder="shared_secret_token" type="text">
+    </div>
+    <div class="setup-divider">Cloudflare R2 (Direct Read Access)</div>
+    <div class="setup-field">
+      <label>R2 Endpoint URL</label>
+      <input id="f-r2-endpoint" placeholder="https://<account-id>.r2.cloudflarestorage.com" type="text">
+    </div>
+    <div class="setup-field">
+      <label>R2 Access Key ID</label>
+      <input id="f-r2-access-key" placeholder="Enter R2 Access Key" type="text">
+    </div>
+    <div class="setup-field">
+      <label>R2 Secret Access Key</label>
+      <input id="f-r2-secret-key" placeholder="••••••••" type="password">
+    </div>
+    <div class="setup-field">
+      <label>R2 Bucket Name</label>
+      <input id="f-r2-bucket" placeholder="steenbok-logs" type="text" value="steenbok-logs">
     </div>
 
     <button class="btn-primary" onclick="setupConnect()">Connect & Save</button>
@@ -1095,8 +1135,9 @@ function updateSensorConfigFromDevice() {
     <button class="tab" onclick="switchTab('config')">Config</button>
     <button class="tab" onclick="switchTab('events')">Events</button>
     <button class="tab" onclick="switchTab('log')">Log</button>
-    <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
+    <button class="tab" onclick="switchTab('r2logs')" id="tab-r2logs">R2 Logs</button>
     <button class="tab" onclick="switchTab('admin')">Admin</button>
+    <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
   </div>
 
   <!-- STATUS -->
@@ -1216,6 +1257,70 @@ function updateSensorConfigFromDevice() {
     <div class="sensor-cards" id="remote-cards"></div>
   </div>
 
+  <!-- R2 LOGS -->
+  <div class="panel" id="panel-r2logs" style="flex-direction: column; overflow: hidden; padding: 0;">
+    <div class="log-toolbar" style="gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; flex-shrink: 0;">
+      <button class="tab active" id="subtab-uploaded" onclick="switchR2Subtab('uploaded')" style="font-size: 10px; padding: 6px 12px; border-radius: 4px 4px 0 0;">Uploaded Logs</button>
+      <button class="tab" id="subtab-request" onclick="switchR2Subtab('request')" style="font-size: 10px; padding: 6px 12px; border-radius: 4px 4px 0 0;">Request Logs</button>
+    </div>
+
+    <!-- Uploaded Logs Sub-Tab -->
+    <div id="r2-subpanel-uploaded" style="flex: 1; display: flex; flex-direction: row; overflow: hidden;">
+      <div style="width: 250px; border-right: 1px solid var(--border); background: var(--bg2); display: flex; flex-direction: column; flex-shrink: 0; padding: 12px;">
+        <button class="sc-btn primary" onclick="requestR2List()" style="width: 100%; margin-bottom: 12px;">Refresh File List</button>
+        <div id="r2-file-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-align: center; padding: 10px;">Click Refresh to load...</div>
+        </div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; padding: 16px; overflow: hidden; background: var(--bg);">
+        <h4 id="r2-viewer-title" style="font-family: var(--mono); font-size: 12px; margin-bottom: 10px; color: var(--pink);">R2 Log Viewer</h4>
+        <pre style="flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin: 0; padding: 14px;"><code id="r2-viewer-content" class="language-json" style="outline: none; font-size: 10px; line-height: 1.6; font-family: var(--mono); min-height: 100%; white-space: pre-wrap; display: block;">Select a file from the list to view its contents...</code></pre>
+      </div>
+    </div>
+
+    <!-- Request Logs Sub-Tab -->
+    <div id="r2-subpanel-request" style="flex: 1; display: none; flex-direction: column; padding: 20px; overflow-y: auto;">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end;">
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">START DATE & TIME</label>
+          <div style="display: flex; gap: 8px;">
+            <input id="r2-start-date" type="date" style="flex: 2;">
+            <input id="r2-start-time" type="time" value="00:00" style="flex: 1;">
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px;">END DATE & TIME</label>
+          <div style="display: flex; gap: 8px;">
+            <input id="r2-end-date" type="date" style="flex: 2;">
+            <input id="r2-end-time" type="time" value="23:59" style="flex: 1;">
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="sc-btn primary" id="btn-query-logs" onclick="queryDeviceLogsRange()" style="height: 33px;">Query Available</button>
+          <button class="sc-btn" onclick="triggerDeviceUploadR2('logs')" id="btn-upload-logs-r2" style="height: 33px; border-color: var(--pink); color: var(--pink);">Upload Logs</button>
+          <button class="sc-btn" onclick="triggerDeviceUploadR2('events')" id="btn-upload-events-r2" style="height: 33px; border-color: var(--pink); color: var(--pink);">Upload Events</button>
+        </div>
+      </div>
+
+      <!-- Real-time Progress Tracking Section -->
+      <div id="r2-progress-container" style="display: none; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-family: var(--mono); font-size: 11px; font-weight: bold; color: var(--pink);" id="r2-progress-label">Active Transfer Progress</span>
+          <span style="font-family: var(--mono); font-size: 11px; font-weight: bold; color: var(--text);" id="r2-progress-percent">0%</span>
+        </div>
+        <div style="width: 100%; height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+          <div id="r2-progress-bar" style="width: 0%; height: 100%; background: var(--pink); transition: width 0.3s;"></div>
+        </div>
+      </div>
+
+      <!-- Graphical Logs Query Results -->
+      <div id="r2-query-results-container" style="display: none;">
+        <h3 style="font-family: var(--mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">Available Logs List</h3>
+        <div id="r2-query-bars" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- CONFIG -->
   <div class="panel" id="panel-config">
     <div class="config-left" id="config-nav-list">
@@ -1242,7 +1347,7 @@ function updateSensorConfigFromDevice() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <label style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">Count:</label>
         <input id="events-count" type="number" value="20" min="1" max="1000" style="width:65px;padding:4px 6px;height:28px;">
-        <button class="sc-btn primary" onclick="requestEventsList()">Fetch Events List</button>
+        <button class="sc-btn primary" id="btn-fetch-events" onclick="requestEventsList()">Fetch Events List</button>
         <button class="sc-btn" onclick="clearEventsList()">Clear Events View</button>
       </div>
     </div>
@@ -1261,7 +1366,7 @@ function updateSensorConfigFromDevice() {
         <label style="font-family:var(--mono);font-size:10px;color:var(--text-muted)">Count:</label>
         <input id="sd-logs-count" type="number" value="50" min="1" max="1000" style="width:65px;padding:2px 4px;height:24px;">
       </div>
-      <button class="log-clear" onclick="requestSDLogs()">Fetch SD Logs</button>
+      <button class="log-clear" id="btn-fetch-sd-logs" onclick="requestSDLogs()">Fetch SD Logs</button>
       <button class="log-clear" onclick="clearLog()">Clear</button>
     </div>
     <div class="log-body" id="log-body"></div>
@@ -1401,6 +1506,18 @@ function timeAgo(ts) {
   return `(${days} day${days === 1 ? '' : 's'} ago)`;
 }
 
+function formatEventDate(tVal) {
+  if (!tVal) return '—';
+  const d = new Date(tVal * 1000);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${yyyy}/${mm}/${dd} ${hh}:${min}:${ss}`;
+}
+
 // ─── Device Last Seen Status ──────────────────────────────────────
 function updateDeviceLastSeen() {
   if (!deviceLastSeenS) {
@@ -1494,6 +1611,17 @@ window.addEventListener('DOMContentLoaded', () => {
   buildSidebarSensors();
   buildRemoteCards();
 
+  // Set default dates for R2 Logs tab using local date
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+  const startDateInput = document.getElementById('r2-start-date');
+  const endDateInput = document.getElementById('r2-end-date');
+  if (startDateInput) startDateInput.value = todayStr;
+  if (endDateInput) endDateInput.value = todayStr;
+
   const sel = document.getElementById('dev-sensor-select');
   if (sel) {
     SENSOR_CONFIG.forEach(s => {
@@ -1547,24 +1675,36 @@ function readCredFile(file) {
 function populateSetupForm(c) {
   if (c.broker)    document.getElementById('f-broker').value = c.broker;
   if (c.port)      document.getElementById('f-port').value   = c.port;
+  if (c.proto)     document.getElementById('f-proto').value  = c.proto;
+  if (c.path)      document.getElementById('f-path').value   = c.path;
   if (c.username || c.user) document.getElementById('f-user').value = c.username || c.user;
   if (c.password)  document.getElementById('f-pass').value   = c.password;
   if (c.device_id) document.getElementById('f-device').value = c.device_id;
   if (c.cmd_token) document.getElementById('f-token').value  = c.cmd_token;
+  if (c.r2_endpoint) document.getElementById('f-r2-endpoint').value = c.r2_endpoint;
+  if (c.r2_access_key) document.getElementById('f-r2-access-key').value = c.r2_access_key;
+  if (c.r2_secret_key) document.getElementById('f-r2-secret-key').value = c.r2_secret_key;
+  if (c.r2_bucket) document.getElementById('f-r2-bucket').value = c.r2_bucket;
 }
 
 function setupConnect() {
   const broker    = document.getElementById('f-broker').value.trim();
   const port      = parseInt(document.getElementById('f-port').value) || 8884;
+  const proto     = document.getElementById('f-proto').value;
+  const path      = document.getElementById('f-path').value.trim() || '/';
   const username  = document.getElementById('f-user').value.trim();
   const password  = document.getElementById('f-pass').value;
   const device_id = document.getElementById('f-device').value.trim() || 'diewesemoer';
   const cmd_token = document.getElementById('f-token').value.trim();
+  const r2_endpoint = document.getElementById('f-r2-endpoint').value.trim();
+  const r2_access_key = document.getElementById('f-r2-access-key').value.trim();
+  const r2_secret_key = document.getElementById('f-r2-secret-key').value.trim();
+  const r2_bucket = document.getElementById('f-r2-bucket').value.trim() || 'steenbok-logs';
 
   if (!broker) { showSetupError('Broker host is required.'); return; }
   if (!username || !password) { showSetupError('Username and password required.'); return; }
 
-  const c = { broker, port, username, password, device_id, cmd_token };
+  const c = { broker, port, proto, path, username, password, device_id, cmd_token, r2_endpoint, r2_access_key, r2_secret_key, r2_bucket };
   saveCreds(c);
   hideSetup();
   connect();
@@ -1576,9 +1716,9 @@ function showSetupError(msg) {
 }
 
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => {
-    const panels = ['status','sensors','config','events','log','setup','admin'];
-    t.classList.toggle('active', panels[i] === name);
+  document.querySelectorAll('.tab').forEach((t) => {
+    const panels = ['status','sensors','config','events','log','r2logs','admin','setup'];
+    t.classList.toggle('active', t.id === 'tab-' + name || t.textContent.toLowerCase().includes(name) || (name === 'r2logs' && t.id === 'tab-r2logs'));
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if (name === 'setup') { showSetup(); return; }
@@ -1593,6 +1733,7 @@ function switchTab(name) {
   }
   if (name === 'config')  requestConfig();
   if (name === 'events')  requestEventsList();
+  if (name === 'r2logs')  requestR2List();
   if (name === 'admin')   populateAdminTripDropdown();
 
   // Recalculate and adjust visual alignment and coordinates on return to the status view
@@ -1602,16 +1743,319 @@ function switchTab(name) {
     });
   }
 }
+
+// ─── R2 Logs Tab Symmetrical Handling (Direct Minimal Trust Read API) ────
+let r2ActiveSubtab = "uploaded";
+let s3ClientInstance = null;
+
+function getS3Client() {
+  if (s3ClientInstance) return s3ClientInstance;
+  if (!credentials || !credentials.r2_access_key || !credentials.r2_secret_key || !credentials.r2_endpoint) {
+    return null;
+  }
+  
+  // Initialize the browser S3 client directly using loaded SDK v2
+  s3ClientInstance = new AWS.S3({
+    accessKeyId: credentials.r2_access_key,
+    secretAccessKey: credentials.r2_secret_key,
+    endpoint: credentials.r2_endpoint,
+    s3ForcePathStyle: true,
+    signatureVersion: 'v4',
+    region: 'auto'
+  });
+  return s3ClientInstance;
+}
+
+function switchR2Subtab(sub) {
+  r2ActiveSubtab = sub;
+  document.getElementById('subtab-uploaded').classList.toggle('active', sub === 'uploaded');
+  document.getElementById('subtab-request').classList.toggle('active', sub === 'request');
+  document.getElementById('r2-subpanel-uploaded').style.display = sub === 'uploaded' ? 'flex' : 'none';
+  document.getElementById('r2-subpanel-request').style.display = sub === 'request' ? 'flex' : 'none';
+}
+
+function requestR2List() {
+  const s3 = getS3Client();
+  const listContainer = document.getElementById('r2-file-list');
+  
+  if (!s3) {
+    if (listContainer) {
+      listContainer.innerHTML = '<div style="font-family: var(--mono); font-size: 10px; color: var(--red); text-align: center; padding: 10px;">Missing R2 credentials. Configure in Setup Tab.</div>';
+    }
+    return;
+  }
+  
+  if (listContainer) {
+    listContainer.innerHTML = '<div style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-align: center; padding: 10px;">Listing bucket files...</div>';
+  }
+
+  const did = credentials?.device_id || 'diewesemoer';
+  const bucketName = credentials?.r2_bucket || 'steenbok-logs';
+
+  // Gather objects under both /logs/[device id]/ and /events/[device id]/ paths
+  const prefixes = [`logs/${did}/`, `events/${did}/`];
+  let accumulatedFiles = [];
+  let pendingQueries = prefixes.length;
+
+  prefixes.forEach(prefix => {
+    s3.listObjectsV2({ Bucket: bucketName, Prefix: prefix }, (err, data) => {
+      pendingQueries--;
+      if (err) {
+        console.error("R2 List error for prefix:", prefix, err);
+      } else if (data.Contents) {
+        data.Contents.forEach(obj => {
+          accumulatedFiles.push({
+            key: obj.Key,
+            size: obj.Size,
+            last_modified: Math.floor(new Date(obj.LastModified).getTime() / 1000)
+          });
+        });
+      }
+
+      if (pendingQueries === 0) {
+        renderR2List(accumulatedFiles);
+      }
+    });
+  });
+}
+
+function renderR2List(files) {
+  const container = document.getElementById('r2-file-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!files || files.length === 0) {
+    container.innerHTML = '<div style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); text-align: center; padding: 10px;">No files uploaded yet</div>';
+    return;
+  }
+
+  // Sort files by last modified timestamp descending (newest first)
+  files.sort((a, b) => b.last_modified - a.last_modified);
+
+  files.forEach(f => {
+    const item = document.createElement('div');
+    item.style.padding = '8px 10px';
+    item.style.background = 'var(--bg3)';
+    item.style.border = '1px solid var(--border)';
+    item.style.borderRadius = '4px';
+    item.style.cursor = 'pointer';
+    item.style.transition = 'all 0.15s';
+    item.style.fontFamily = 'var(--mono)';
+    item.style.fontSize = '9px';
+
+    const filename = f.key.split('/').pop();
+    const isEventFile = f.key.startsWith('events/');
+    const typeLabel = isEventFile ? '⚡ EVENT' : '📝 LOG';
+    const typeColor = isEventFile ? 'var(--green)' : 'var(--pink)';
+    const sizeKB = (f.size / 1024).toFixed(1);
+    const dateStr = new Date(f.last_modified * 1000).toLocaleString();
+
+    item.innerHTML = `
+      <div style="font-weight: bold; color: ${typeColor}; margin-bottom: 2px;">${typeLabel}</div>
+      <div style="color: var(--text); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${filename}">${filename}</div>
+      <div style="color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between;">
+        <span>${sizeKB} KB</span>
+        <span>${dateStr}</span>
+      </div>
+    `;
+
+    item.addEventListener('mouseenter', () => { item.style.borderColor = typeColor; });
+    item.addEventListener('mouseleave', () => { item.style.borderColor = 'var(--border)'; });
+    item.addEventListener('click', () => {
+      document.getElementById('r2-viewer-title').textContent = `R2 Viewer: ${filename}`;
+      const contentCode = document.getElementById('r2-viewer-content');
+      contentCode.textContent = "Loading file content directly from Cloudflare R2...";
+      
+      const s3 = getS3Client();
+      const bucketName = credentials?.r2_bucket || 'steenbok-logs';
+
+      s3.getObject({ Bucket: bucketName, Key: f.key }, (err, data) => {
+        if (err) {
+          contentCode.textContent = `Error loading file: ${err.message}`;
+        } else {
+          contentCode.textContent = data.Body.toString('utf-8');
+          if (typeof Prism !== 'undefined') {
+            setTimeout(() => { Prism.highlightElement(contentCode); }, 50);
+          }
+        }
+      });
+    });
+
+    container.appendChild(item);
+  });
+}
+
+function queryDeviceLogsRange() {
+  const startDate = document.getElementById('r2-start-date').value;
+  const startTime = document.getElementById('r2-start-time').value || "00:00";
+  const endDate = document.getElementById('r2-end-date').value;
+  const endTime = document.getElementById('r2-end-time').value || "23:59";
+
+  if (!startDate || !endDate) {
+    alert("Please select both start and end date targets.");
+    return;
+  }
+
+  const startVal = `${startDate}T${startTime}`;
+  const endVal = `${endDate}T${endTime}`;
+
+  const startEpoch = Math.floor(new Date(startVal).getTime() / 1000);
+  const endEpoch = Math.floor(new Date(endVal).getTime() / 1000);
+
+  if (startEpoch > endEpoch) {
+    alert("Start datetime cannot exceed target end datetime.");
+    return;
+  }
+
+  const btn = document.getElementById('btn-query-logs');
+  if (btn) {
+    btn.textContent = "Querying...";
+    btn.disabled = true;
+    btn.style.opacity = "0.6";
+  }
+
+  const did = credentials?.device_id || 'diewesemoer';
+  publish(`cmd/${did}/logs/query`, makePayload({ start_epoch: startEpoch, end_epoch: endEpoch }), 1);
+  sysLog(`Querying device logs available between ${startVal} and ${endVal}`);
+}
+
+function renderDeviceLogsQueryResult(results) {
+  const btn = document.getElementById('btn-query-logs');
+  if (btn) {
+    btn.textContent = "Query Available";
+    btn.disabled = false;
+    btn.style.opacity = "";
+  }
+
+  const container = document.getElementById('r2-query-bars');
+  const resultsWrapper = document.getElementById('r2-query-results-container');
+  if (!container || !resultsWrapper) return;
+
+  container.innerHTML = '';
+  resultsWrapper.style.display = 'block';
+
+  if (!results || results.length === 0) {
+    container.innerHTML = '<div style="font-family: var(--mono); font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">No files found on device for this range</div>';
+    return;
+  }
+
+  const maxSize = Math.max(...results.map(r => r.total_size_bytes), 1);
+
+  results.forEach(r => {
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.gap = '12px';
+    row.style.fontFamily = 'var(--mono)';
+    row.style.fontSize = '11px';
+    row.style.padding = '6px 0';
+    row.style.borderBottom = '1px solid var(--border)';
+
+    const sizeKB = (r.total_size_bytes / 1024).toFixed(1);
+    const barWidthPct = Math.max(2, (r.total_size_bytes / maxSize) * 100);
+
+    row.innerHTML = `
+      <div style="width: 90px; flex-shrink: 0; color: var(--text);">${r.date}</div>
+      <div style="flex: 1; height: 12px; background: var(--bg3); border-radius: 2px; overflow: hidden; border: 1px solid var(--border); display: flex;">
+        <div style="width: ${barWidthPct}%; height: 100%; background: var(--pink); opacity: 0.85;"></div>
+      </div>
+      <div style="width: 140px; flex-shrink: 0; text-align: right; color: var(--text-muted);">
+        <span style="color: var(--text); font-weight: bold;">${r.files_count}</span> files (${sizeKB} KB)
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function triggerDeviceUploadR2(type) {
+  if (window.powerSaveActive) { showPowerSaveInfoModal(); return; }
+  const startDate = document.getElementById('r2-start-date').value;
+  const startTime = document.getElementById('r2-start-time').value || "00:00";
+  const endDate = document.getElementById('r2-end-date').value;
+  const endTime = document.getElementById('r2-end-time').value || "23:59";
+
+  if (!startDate || !endDate) {
+    alert("Select date targets first.");
+    return;
+  }
+
+  const startVal = `${startDate}T${startTime}`;
+  const endVal = `${endDate}T${endTime}`;
+
+  const startEpoch = Math.floor(new Date(startVal).getTime() / 1000);
+  const endEpoch = Math.floor(new Date(endVal).getTime() / 1000);
+
+  const did = credentials?.device_id || 'diewesemoer';
+  const targetTopic = `cmd/${did}/${type}/request`;
+  
+  const progContainer = document.getElementById('r2-progress-container');
+  const progLabel = document.getElementById('r2-progress-label');
+  const progPercent = document.getElementById('r2-progress-percent');
+  const progBar = document.getElementById('r2-progress-bar');
+  
+  if (progContainer && progLabel && progPercent && progBar) {
+    progLabel.textContent = `Streaming ${type.toUpperCase()}...`;
+    progPercent.textContent = '0%';
+    progBar.style.width = '0%';
+    progContainer.style.display = 'block';
+  }
+
+  publish(targetTopic, makePayload({ start_epoch: startEpoch, end_epoch: endEpoch }), 1);
+  sysLog(`Requested R2 secure ${type.toUpperCase()} stream for range: ${startVal} to ${endVal}`);
+}
+
+function updateR2UploadProgress(type, progress) {
+  const progContainer = document.getElementById('r2-progress-container');
+  const progLabel = document.getElementById('r2-progress-label');
+  const progPercent = document.getElementById('r2-progress-percent');
+  const progBar = document.getElementById('r2-progress-bar');
+
+  if (!progContainer || !progLabel || !progPercent || !progBar) return;
+
+  // Normalize string: strip surrounding quotes and whitespace
+  if (typeof progress === 'string') {
+    progress = progress.trim();
+    if (progress.startsWith('"') && progress.endsWith('"')) {
+      progress = progress.slice(1, -1).trim();
+    }
+  }
+
+  progLabel.textContent = `Streaming ${type.toUpperCase()}...`;
+  progPercent.textContent = progress;
+
+  if (progress.endsWith('%')) {
+    const pctVal = parseInt(progress);
+    progBar.style.width = `${pctVal}%`;
+    progBar.style.background = 'var(--pink)';
+    progContainer.style.display = 'block';
+  } else if (progress === 'Done') {
+    progBar.style.width = '100%';
+    progBar.style.background = 'var(--green)';
+    progLabel.textContent = `Streaming ${type.toUpperCase()} Complete!`;
+    progContainer.style.display = 'block';
+    setTimeout(() => { 
+      progContainer.style.display = 'none'; 
+      if (r2ActiveSubtab === 'uploaded') requestR2List();
+    }, 4000);
+  } else if (progress === 'Cancelled' || progress === 'Failed') {
+    progBar.style.background = 'var(--red)';
+    progLabel.textContent = `Streaming ${type.toUpperCase()} ${progress.toUpperCase()}`;
+    progContainer.style.display = 'block';
+    setTimeout(() => { progContainer.style.display = 'none'; }, 5000);
+  }
+}
 // ═══════════════════════════════════════════════════════════════════════════
 //  MQTT CONNECTION
 // ═══════════════════════════════════════════════════════════════════════════
 function connect() {
   if (!credentials) return;
-  const { broker, port, username, password, device_id } = credentials;
+  const { broker, port, proto, path, username, password, device_id } = credentials;
 
   setConnStatus('pend', 'connecting…');
 
-  const url = `wss://${broker}:${port}/mqtt`;
+  const connectionProto = proto || 'wss';
+  const connectionPath = path !== undefined ? path : '/mqtt';
+  const url = `${connectionProto}://${broker}:${port}${connectionPath}`;
   const clientId = `web_${device_id}_${Math.random().toString(16).slice(2,8)}`;
 
   client = mqtt.connect(url, {
@@ -1635,6 +2079,12 @@ function connect() {
     client.subscribe(`status/${did}/events`, { qos: 1 });
     client.subscribe(`status/${did}/heartbeat`, { qos: 0 });
     client.subscribe(`status/${did}/errors`, { qos: 1 });
+    
+    // Subscribe to unified log result topics
+    client.subscribe(`status/${did}/logs/progress`, { qos: 1 });
+    client.subscribe(`status/${did}/events/progress`, { qos: 1 });
+    client.subscribe(`status/${did}/logs/query/result`, { qos: 1 });
+
     logRx('sys', 'subscribed', `status/${did}/# and alarm/${did}/#`);
 
     // Automatically pull structural configuration slices on startup to build local visual components
@@ -1642,8 +2092,21 @@ function connect() {
     publish(`cmd/${did}/config/get/remotes`, makePayload(), 1);
   });
 
-  client.on('message', (topic, payload) => {
+  client.on('message', (topic, payload, packet) => {
     const msg = payload.toString();
+    const isRetained = packet ? !!packet.retain : false;
+
+    // Discard retained messages for ephemeral topics
+    if (isRetained) {
+      if (topic.endsWith('/errors') || 
+          topic.endsWith('/actions') || 
+          topic.endsWith('/events') || 
+          topic.endsWith('/progress') || 
+          topic.includes('/alarm/')) {
+        return;
+      }
+    }
+
     logRx('rx', topic, msg);
     handleMessage(topic, msg);
   });
@@ -1682,13 +2145,34 @@ function handleMessage(topic, raw) {
 
   const did = credentials?.device_id || 'diewesemoer';
 
+  // Config slice handler (processed first to prevent status topic shadowing)
+  if (topic.includes('/config/')) {
+    const parts = topic.split('/');
+    const section = parts[parts.length - 1];
+    if (!deviceConfig) deviceConfig = {};
+    deviceConfig[section] = data;
+
+    // Dynamically update dependent UI views on slice arrival
+    if (section === 'sensors') {
+      updateSensorConfigFromDevice();
+      buildSensorCards();
+    }
+    if (section === 'remotes') {
+      buildRemoteCards();
+    }
+
+    buildConfigNavigation();
+    refreshConfigEditor();
+    return;
+  }
+
   // Alarm triggered event (with delivery acknowledgement)
   if (topic === `alarm/${did}/triggered`) {
     const eventId = data.event_id || 0;
     if (eventId) {
       publish(`cmd/${did}/alarm/ack`, makePayload({ event_id: eventId }), 1);
     }
-    setAlarmState('ALARMING');
+    // Visually tracked exclusively by authoritative /status/armed topic to prevent GPRS buffer replay hijack
     return;
   }
 
@@ -1700,12 +2184,29 @@ function handleMessage(topic, raw) {
 
   if (topic.endsWith('/errors')) {
     showGuiNotification(data);
+    // Restore all three fetch buttons upon error response
+    ['btn-query-logs', 'btn-fetch-sd-logs', 'btn-fetch-events'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = "";
+        if (id === 'btn-query-logs') btn.textContent = "Query Available";
+        else if (id === 'btn-fetch-sd-logs') btn.textContent = "Fetch SD Logs";
+        else if (id === 'btn-fetch-events') btn.textContent = "Fetch Events List";
+      }
+    });
     return;
   }
 
 
     // Events query results (Independent Event Log list)
     if (topic.endsWith('/events')) {
+      const btn = document.getElementById('btn-fetch-events');
+      if (btn) {
+        btn.textContent = "Fetch Events List";
+        btn.disabled = false;
+        btn.style.opacity = "";
+      }
       if (data.entries && Array.isArray(data.entries)) {
         renderEventsList(data.entries, data.index === 0);
       }
@@ -1715,6 +2216,12 @@ function handleMessage(topic, raw) {
 
   // Batched SD Card logs (SD Logs get) (resolves [object Object] issue by formatting parsed objects)
   if (topic.endsWith('/log')) {
+    const btn = document.getElementById('btn-fetch-sd-logs');
+    if (btn) {
+      btn.textContent = "Fetch SD Logs";
+      btn.disabled = false;
+      btn.style.opacity = "";
+    }
     if (data.entries && Array.isArray(data.entries)) {
       data.entries.forEach(line => {
         let formattedMsg = line;
@@ -1724,6 +2231,24 @@ function handleMessage(topic, raw) {
         }
         logRx('sys', 'sd_log', formattedMsg);
       });
+    }
+    return;
+  }
+
+  // Symmetrical R2 active progress meter updates
+  if (topic.endsWith('/logs/progress')) {
+    updateR2UploadProgress('logs', raw);
+    return;
+  }
+  if (topic.endsWith('/events/progress')) {
+    updateR2UploadProgress('events', raw);
+    return;
+  }
+
+  // Device log query results
+  if (topic.endsWith('/logs/query/result') || topic.endsWith('/logs/que')) {
+    if (Array.isArray(data)) {
+      renderDeviceLogsQueryResult(data);
     }
     return;
   }
@@ -1842,27 +2367,6 @@ function handleMessage(topic, raw) {
 
   if (topic.endsWith('/power')) {
     updatePowerStatus(data);
-    return;
-  }
-
-  // Config slice handler
-  if (topic.includes('/config/')) {
-    const parts = topic.split('/');
-    const section = parts[parts.length - 1];
-    if (!deviceConfig) deviceConfig = {};
-    deviceConfig[section] = data;
-
-    // Dynamically update dependent UI views on slice arrival
-    if (section === 'sensors') {
-      updateSensorConfigFromDevice();
-      buildSensorCards();
-    }
-    if (section === 'remotes') {
-      buildRemoteCards();
-    }
-
-    buildConfigNavigation();
-    refreshConfigEditor();
     return;
   }
 
@@ -2024,7 +2528,7 @@ function buildFloorplan() {
     div.dataset.id   = s.id;
     div.dataset.label= s.name;
     div.title        = s.name;
-    div.innerHTML    = `<div class="bub-icon"></div>
+    div.innerHTML    = `<div class="bub-icon ${s.type || 'pir'}"></div>
       <div class="sensor-warn" id="sensor-warn-${s.id}"></div>`;
     div.addEventListener('click', () => toggleSensor(s.id));
     wrap.appendChild(div);
@@ -2383,8 +2887,11 @@ function updateBeams() {
     const beam = _beamEls[s.id];
     if (beam) {
       beam.classList.remove('armed', 'triggered');
-      if (triggered && (active || isPower))  beam.classList.add('triggered');
-      else if (active)          beam.classList.add('armed');
+      if (triggered && (active || isPower)) {
+        beam.classList.add('triggered');
+      } else if (active && !st.defective) {
+        beam.classList.add('armed');
+      }
     }
 
     const bub = _bubbleEls[s.id];
@@ -2396,7 +2903,10 @@ function updateBeams() {
 
       const warn = _warnEls[s.id];
       if (warn) {
-        if (stale && st.last_seen) {
+        if (st.defective) {
+          warn.textContent = `⚠ laser defective`;
+          warn.className = 'sensor-warn defective';
+        } else if (stale && st.last_seen) {
           warn.textContent = `⚠ last seen ${staleDuration(nowS, st.last_seen)}`;
           warn.className = 'sensor-warn stale';
         } else {
@@ -3158,6 +3668,12 @@ function submitAddSensor() {
 // ═══════════════════════════════════════════════════════════════════════════
 function requestEventsList() {
   if (!credentials) return;
+  const btn = document.getElementById('btn-fetch-events');
+  if (btn) {
+    btn.textContent = "Fetching...";
+    btn.disabled = true;
+    btn.style.opacity = "0.6";
+  }
   const did = credentials.device_id || 'diewesemoer';
   const countInput = document.getElementById('events-count');
   const count = countInput ? (parseInt(countInput.value, 10) || 150) : 150;
@@ -3244,7 +3760,7 @@ function renderEventsList(entries, clearContainer = true) {
     row.style.fontSize = '11px';
     row.style.alignItems = 'center';
 
-    const timeStr = tVal ? new Date(tVal * 1000).toLocaleString() : '—';
+    const timeStr = formatEventDate(tVal);
     const icon = getActionIcon(entry.type);
     const typeBadgeColor = getActionBorderColor(entry.type);
 
@@ -3273,6 +3789,12 @@ function setConnStatus(type, label) {
 // ─── SD Card Log Actions ───────────────────────────────────────────
 function requestSDLogs() {
   if (!credentials) return;
+  const btn = document.getElementById('btn-fetch-sd-logs');
+  if (btn) {
+    btn.textContent = "Fetching...";
+    btn.disabled = true;
+    btn.style.opacity = "0.6";
+  }
   const did = credentials.device_id || 'diewesemoer';
   const countInput = document.getElementById('sd-logs-count');
   const count = countInput ? (parseInt(countInput.value, 10) || 200) : 200;
