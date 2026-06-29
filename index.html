@@ -1202,8 +1202,9 @@ function updateSensorConfigFromDevice() {
         <div class="stat-row"><span class="stat-label">Source</span>     <span class="stat-val" id="s-source">—</span></div>
         <div class="stat-row"><span class="stat-label">Power</span>      <span class="stat-val" id="s-power">—</span></div>
         <div class="stat-row"><span class="stat-label">WiFi</span>       <span class="stat-val" id="s-wifi">—</span></div>
+        <div class="stat-row"><span class="stat-label">Cell Signal</span> <span class="stat-val" id="s-cell">—</span></div>
         <div class="stat-row"><span class="stat-label">MQTT</span>       <span class="stat-val" id="s-mqtt">—</span></div>
-        <div class="stat-row"><span class="stat-label">SD Free</span>    <span class="stat-val" id="s-sdfree">—</span></div>
+        <div class="stat-row"><span class="stat-label">SD Card</span>    <span class="stat-val" id="s-sdfree">—</span></div>
         <div class="stat-row"><span class="stat-label">Uptime</span>     <span class="stat-val" id="s-uptime">—</span></div>
         <div class="stat-row"><span class="stat-label">RAM free</span>   <span class="stat-val" id="s-ram">—</span></div>
         <div class="stat-row"><span class="stat-label">Last seen</span>  <span class="stat-val" id="s-lastseen">—</span></div>
@@ -2350,6 +2351,24 @@ function handleMessage(topic, raw) {
     if (data.power !== undefined || data.on_mains !== undefined) updatePowerStatus(data);
     if (data.ssid !== undefined) {
       setStatVal('s-wifi', data.ssid || 'disconnected', 'green');
+    }
+
+    // Parse and display cellular CSQ signal
+    if (data.csq !== undefined) {
+      const csq = Number(data.csq);
+      if (csq > 0 && csq !== 99) {
+        const dbm = -113 + (csq * 2);
+        const pct = Math.round((csq / 31) * 100);
+        let color = "red";
+        if (csq >= 20) { color = "green"; }
+        else if (csq >= 15) { color = "green"; }
+        else if (csq >= 10) { color = "amber"; }
+        setStatVal('s-cell', `${dbm} dBm (${pct}%)`, color);
+      } else {
+        setStatVal('s-cell', 'no signal', 'red');
+      }
+    } else {
+      setStatVal('s-cell', 'offline', 'red');
     }
 
     // SD Card free space readout - strictly parses sd_free_kb and formats units
