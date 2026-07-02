@@ -25,16 +25,16 @@
         <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
             <div>
                 <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">1. Signal Quality, RAM & System Uptime</h3>
-                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">Line gaps represent "Disconnected" periods. Events: Reboots (▲) and Missed Check-ins (✖)</span>
+                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">Line gaps represent "Disconnected" periods. Events: Reboots (⟲) and Missed Check-ins (☎)</span>
             </div>
             
             <!-- Styled Chart Legending -->
             <div style="display: flex; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 9px; padding: 6px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;">
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #3b82f6; display: inline-block;"></span> <span style="color: var(--text-dim);">Signal (dBm)</span></div>
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; border-top: 2px dashed #a855f7; display: inline-block;"></span> <span style="color: var(--text-dim);">Free RAM (MB)</span></div>
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #14b8a6; display: inline-block;"></span> <span style="color: var(--text-dim);">Uptime (Hours)</span></div>
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--amber); font-weight: bold;">▲</span> <span style="color: var(--text-dim);">Hardware Reboot</span></div>
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">◆</span> <span style="color: var(--text-dim);">Missed Heartbeat</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #f97316; display: inline-block;"></span> <span style="color: var(--text-dim);">Signal (dBm)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; border-top: 2px dashed #0d9488; display: inline-block;"></span> <span style="color: var(--text-dim);">Free RAM (MB)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #88888e; display: inline-block;"></span> <span style="color: var(--text-dim);">Uptime (Hours)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">⟲</span> <span style="color: var(--text-dim);">Hardware Reboot</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">☎</span> <span style="color: var(--text-dim);">Missed Heartbeat</span></div>
             </div>
         </div>
         <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartVitals"></canvas></div>

@@ -1610,6 +1610,12 @@ function toggleTheme() {
   const next    = current === 'dark' ? 'light' : 'dark';
   applyTheme(next);
   saveThemePref(next);
+
+  // Redraw charts if the analytics tab is active
+  const analyticsPanel = document.getElementById('panel-analytics');
+  if (analyticsPanel && analyticsPanel.classList.contains('active')) {
+    fetchAnalyticsData();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4197,11 +4203,35 @@ async function fetchAnalyticsData() {
 function renderAnalyticsCharts(data) {
   const telemetry = {
     labels: [], dbm: [], ram: [], uptimeHours: [],
-    powerState: [], cellState: [], connectionState: [],
+    powerState: [], cellState: [], connectionState: [], systemState: [],
     sdFree: [], events: []
   };
 
   const expectedInterval = (analyticsHours * 3600) / 250;
+
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const colorText = isDark ? '#ffffff' : '#1a1916'; // Bright white in dark mode, near-black in light mode
+  const colorTextMuted = isDark ? '#a3a3a3' : '#706e66';
+  const colorBorder = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
+
+  const style = getComputedStyle(document.documentElement);
+  const colorRed = style.getPropertyValue('--red').trim() || '#B83232';
+
+  // Helper to draw clean custom unicode symbols as line-chart point styles
+  function createTextPointStyle(char, color) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 40;
+    canvas.height = 40;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = color;
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(char, 20, 20);
+    return canvas;
+  }
+  const styleReboot = createTextPointStyle('⟲', colorRed);
+  const styleMissed = createTextPointStyle('☎', colorRed);
 
   for (let i = 0; i < data.length; i++) {
     const d = data[i];
@@ -4220,23 +4250,46 @@ function renderAnalyticsCharts(data) {
     telemetry.sdFree.push(d.sd_free_kb / 1024);
 
     telemetry.powerState.push(d.on_mains ? 5 : 4);
-    telemetry.cellState.push(d.cell_active ? 3 : 2);
-    telemetry.connectionState.push(isConnected ? 1 : 0);
+    const isCellActive = (d.csq !== null && d.csq > 0 && d.csq !== 99);
+    telemetry.cellState.push(isCellActive ? 3 : 2);
 
     let isReboot = false;
     if (i > 0 && d.uptime_sec < data[i-1].uptime_sec) isReboot = true;
 
     let isMissed = false;
-    if (i > 0 && (d.utc_ts - data[i-1].utc_ts) > (expectedInterval * 1.5)) isMissed = true;
+    if (i > 0) {
+      const gap = d.utc_ts - data[i-1].utc_ts;
+      // In Power Save, heartbeats are 30 min (1800s). In normal mode, they are 5 min (300s).
+      const wasPowerSave = (data[i-1].ssid === "disconnected" || data[i-1].ssid === "" || !data[i-1].on_mains);
+      const threshold = wasPowerSave ? 2200 : 500; // 36 mins vs 8.3 mins
+      if (gap > threshold) isMissed = true;
+    }
+
+    // WiFi/Internet Connection State (Internet On [1] vs Internet Off [0])
+    let isInternetOn = false;
+    if (!isMissed && d.ssid !== "disconnected" && d.ssid !== "Disconnected" && d.ssid !== "" && d.ssid !== null) {
+      isInternetOn = true;
+    }
+    telemetry.connectionState.push(isInternetOn ? 1 : 0);
+
+    // System Security State mapping (DS, AW, HA, ED, AL, HW) to Y-axis levels -7 to -2
+    let sysStateLevel = null;
+    if (d.security_state) {
+      const stateMap = {
+        "AL": -2,
+        "HW": -3,
+        "ED": -4,
+        "HA": -5,
+        "AW": -6,
+        "DS": -7
+      };
+      sysStateLevel = stateMap[d.security_state] || null;
+    }
+    telemetry.systemState.push(sysStateLevel);
 
     telemetry.events.push({ reboot: isReboot, missed: isMissed });
   }
 
-  const style = getComputedStyle(document.documentElement);
-  const colorText = style.getPropertyValue('--text') || '#E8E6E0';
-  const colorTextMuted = style.getPropertyValue('--text-muted') || '#807E78';
-  const colorBorder = style.getPropertyValue('--border') || 'rgba(255,255,255,0.07)';
-  
   const colorPrimary = '#3b82f6';
   const colorSecondary = '#a855f7';
   const colorDanger = '#f43f5e';
@@ -4255,31 +4308,34 @@ function renderAnalyticsCharts(data) {
         {
           label: 'Signal (dBm)',
           data: telemetry.dbm,
-          borderColor: colorPrimary,
+          borderColor: colorCellular, // Same orange as cellular backup
           borderWidth: 2,
           spanGaps: false,
-          pointRadius: telemetry.events.map(e => e.reboot ? 8 : (e.missed ? 6 : 0)),
-          pointStyle: telemetry.events.map(e => e.reboot ? 'triangle' : 'rectRot'),
-          pointBackgroundColor: telemetry.events.map(e => e.reboot ? colorWarning : colorDanger),
+          pointRadius: telemetry.events.map(e => e.reboot || e.missed ? 20 : 0), // Double size
+          pointStyle: telemetry.events.map(e => e.reboot ? styleReboot : (e.missed ? styleMissed : 'circle')),
+          pointBackgroundColor: '#f43f5e', // Legend red
           pointBorderColor: '#fff',
+          pointHitRadius: 20, // Invisible hover hitbox of 20px
           yAxisID: 'y'
         },
         {
           label: 'Free RAM (MB)',
           data: telemetry.ram,
-          borderColor: colorSecondary,
+          borderColor: '#0d9488', // Teal toward green
           borderWidth: 1.5,
           spanGaps: false,
           pointRadius: 0,
+          pointHitRadius: 20, // Invisible hover hitbox of 20px
           borderDash: [4, 4],
           yAxisID: 'y1'
         },
         {
           label: 'Uptime (Hours)',
           data: telemetry.uptimeHours,
-          borderColor: colorUptime,
+          borderColor: '#88888e', // Lighter neutral color visible in both modes
           borderWidth: 2,
           pointRadius: 0,
+          pointHitRadius: 20, // Invisible hover hitbox of 20px
           yAxisID: 'y2'
         }
       ]
@@ -4289,10 +4345,30 @@ function renderAnalyticsCharts(data) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
-        y: { min: -115, max: -40, position: 'left', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { color: colorBorder } },
-        y1: { position: 'right', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { drawOnChartArea: false } },
-        y2: { position: 'right', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { drawOnChartArea: false } }
+        x: { grid: { color: colorBorder, tickColor: colorBorder }, border: { color: colorBorder }, ticks: { color: colorText, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        y: { 
+          min: -115, 
+          max: -40, 
+          position: 'left', 
+          ticks: { color: colorText, font: { family: 'DM Mono' } }, 
+          grid: { color: colorBorder, tickColor: colorBorder },
+          border: { color: colorBorder },
+          title: { display: true, text: 'Signal (dBm)', color: colorText, font: { family: 'Syne', weight: 'bold', size: 10 } }
+        },
+        y1: { 
+          position: 'right', 
+          ticks: { color: colorText, font: { family: 'DM Mono' } }, 
+          grid: { drawOnChartArea: false },
+          border: { color: colorBorder },
+          title: { display: true, text: 'RAM (MB)', color: colorText, font: { family: 'Syne', weight: 'bold', size: 10 } }
+        },
+        y2: { 
+          position: 'right', 
+          ticks: { color: colorText, font: { family: 'DM Mono' } }, 
+          grid: { drawOnChartArea: false },
+          border: { color: colorBorder },
+          title: { display: true, text: 'Uptime (Hrs)', color: colorText, font: { family: 'Syne', weight: 'bold', size: 10 } }
+        }
       }
     }
   });
@@ -4304,9 +4380,10 @@ function renderAnalyticsCharts(data) {
     data: {
       labels: telemetry.labels,
       datasets: [
-        { label: 'Power State', data: telemetry.powerState, borderColor: colorSuccess, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 },
-        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 },
-        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 }
+        { label: 'Power State', data: telemetry.powerState, borderColor: '#047857', fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 }, // slightly Darker green
+        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 }, // Keep orange
+        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 },
+        { label: 'Security State', data: telemetry.systemState, borderColor: '#e8638a', fill: false, stepped: true, borderWidth: 3, pointRadius: 0, pointHitRadius: 20, spanGaps: false } // Solid pink brand color
       ]
     },
     options: {
@@ -4314,14 +4391,16 @@ function renderAnalyticsCharts(data) {
       maintainAspectRatio: false,
       plugins: { legend: { labels: { color: colorText, font: { family: 'Syne', weight: 'bold' } } } },
       scales: {
-        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        x: { grid: { color: colorBorder, tickColor: colorBorder }, border: { color: colorBorder }, ticks: { color: colorText, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
         y: {
-          min: -1, max: 6,
+          min: -8, max: 6,
           afterFit: function(scale) { scale.width = 180; },
           grid: {
-            color: context => (context.tick.value >= 0 && context.tick.value <= 5) ? colorBorder : 'transparent',
+            color: context => (context.tick.value >= 0 && context.tick.value <= 5) || (context.tick.value <= -2 && context.tick.value >= -7) ? colorBorder : 'transparent',
+            tickColor: colorBorder,
             lineWidth: 1.5
           },
+          border: { color: colorBorder },
           ticks: {
             color: colorText,
             font: { weight: 'bold', size: 10, family: 'DM Mono' },
@@ -4329,12 +4408,19 @@ function renderAnalyticsCharts(data) {
             autoSkip: false,
             callback: function(value) {
               const labels = {
-                5: '⚡ Mains Connected',
-                4: '🔋 Battery Backup',
-                3: '📶 Cellular Connected',
-                2: '📴 Cellular Off/Standby',
-                1: '🌐 WiFi Connected',
-                0: '🚫 WiFi Disconnected'
+                5: 'Mains Connected      V~',
+                4: 'Battery Backup      V⎓',
+                3: 'Cellular Connected ▂ ▃ ▄ ▅',
+                2: 'Cellular Off   ░ ░ ░',
+                1: 'Internet On        •',
+                0: 'Internet Off        ◦',
+                "-1": '',
+                "-2": 'S          Alarming    🔊︎',
+                "-3": 'T      Home Warning   ⚠',
+                "-4": 'A      Entry Delay    ⧗',
+                "-5": 'T       Home Armed    🔒︎',
+                "-6": 'E     Armed (Away)    🔒︎',
+                "-7": '   Disarmed    🔓︎'
               };
               return labels[value] !== undefined ? labels[value] : '';
             }
@@ -4356,6 +4442,7 @@ function renderAnalyticsCharts(data) {
         data: telemetry.sdFree,
         borderWidth: 3,
         pointRadius: 0,
+        pointHitRadius: 20, // Invisible hover hitbox of 20px
         fill: false,
         segment: {
           borderColor: ctx => {
@@ -4371,8 +4458,15 @@ function renderAnalyticsCharts(data) {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
-        y: { min: 0, max: Math.ceil(maxStorageVal * 1.05), ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { color: colorBorder } }
+        x: { grid: { color: colorBorder, tickColor: colorBorder }, border: { color: colorBorder }, ticks: { color: colorText, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        y: { 
+          min: 0, 
+          max: Math.ceil(maxStorageVal * 1.05), 
+          ticks: { color: colorText, font: { family: 'DM Mono' } }, 
+          grid: { color: colorBorder, tickColor: colorBorder },
+          border: { color: colorBorder },
+          title: { display: true, text: 'Free Storage (MB)', color: colorText, font: { family: 'Syne', weight: 'bold', size: 10 } }
+        }
       }
     }
   });
