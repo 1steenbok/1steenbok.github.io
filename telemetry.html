@@ -1,0 +1,57 @@
+<!-- telemetry.html — Theme-Adaptive Chart Panels -->
+
+<!-- Header Controls -->
+<div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; flex-wrap: wrap;">
+    <div>
+        <h2 style="font-family: var(--sans); font-size: 18px; font-weight: 800; color: var(--text);">System Telemetry & Vitals</h2>
+        <p style="font-family: var(--mono); font-size: 11px; color: var(--text-muted); margin-top: 4px;">Dynamic event timeline analysis</p>
+    </div>
+    
+    <!-- Timeframe Selection Buttons -->
+    <div style="display: flex; gap: 2px; padding: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); flex-shrink: 0;">
+        <button onclick="changeAnalyticsTimeframe(1)" class="time-btn-analytics" style="font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 4px; background: transparent; color: var(--text-dim); transition: all 0.2s;">1H</button>
+        <button onclick="changeAnalyticsTimeframe(24)" class="time-btn-analytics active" style="font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 4px; background: var(--pink); color: #fff; transition: all 0.2s;">1D</button>
+        <button onclick="changeAnalyticsTimeframe(72)" class="time-btn-analytics" style="font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 4px; background: transparent; color: var(--text-dim); transition: all 0.2s;">3D</button>
+        <button onclick="changeAnalyticsTimeframe(168)" class="time-btn-analytics" style="font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 4px; background: transparent; color: var(--text-dim); transition: all 0.2s;">1W</button>
+        <button onclick="changeAnalyticsTimeframe(720)" class="time-btn-analytics" style="font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 4px; background: transparent; color: var(--text-dim); transition: all 0.2s;">30D</button>
+    </div>
+</div>
+
+<!-- Charts Grid -->
+<div style="display: flex; flex-direction: column; gap: 24px; max-width: 1200px; width: 100%; margin: 0 auto; padding-bottom: 40px;">
+    
+    <!-- Chart 1: Continuous Vitals (Signal Quality, RAM, Uptime) -->
+    <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+        <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div>
+                <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">1. Signal Quality, RAM & System Uptime</h3>
+                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">Line gaps represent "Disconnected" periods. Events: Reboots (▲) and Missed Check-ins (✖)</span>
+            </div>
+            
+            <!-- Styled Chart Legending -->
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 9px; padding: 6px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;">
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #3b82f6; display: inline-block;"></span> <span style="color: var(--text-dim);">Signal (dBm)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; border-top: 2px dashed #a855f7; display: inline-block;"></span> <span style="color: var(--text-dim);">Free RAM (MB)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #14b8a6; display: inline-block;"></span> <span style="color: var(--text-dim);">Uptime (Hours)</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--amber); font-weight: bold;">▲</span> <span style="color: var(--text-dim);">Hardware Reboot</span></div>
+                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">◆</span> <span style="color: var(--text-dim);">Missed Heartbeat</span></div>
+            </div>
+        </div>
+        <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartVitals"></canvas></div>
+    </div>
+
+    <!-- Chart 2: Categorical States -->
+    <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+        <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px;">2. System States (Stacked Binary Timeline)</h3>
+        <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartStates"></canvas></div>
+    </div>
+
+    <!-- Chart 3: Storage Trend -->
+    <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+            <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">3. Storage Availability Trend</h3>
+            <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted);">Warning Thresholds: <span style="color: var(--green); font-weight: bold;">>2 GB</span> | <span style="color: var(--amber); font-weight: bold;">1–2 GB Warning</span> | <span style="color: var(--red); font-weight: bold;">&lt;1 GB Critical</span></span>
+        </div>
+        <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartStorage"></canvas></div>
+    </div>
+</div>

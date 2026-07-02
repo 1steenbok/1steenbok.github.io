@@ -15,6 +15,7 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1390.0/aws-sdk.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <!-- Prism Syntax Highlighting -->
@@ -1013,6 +1014,10 @@ function updateSensorConfigFromDevice() {
       <label>Command token</label>
       <input id="f-token" placeholder="shared_secret_token" type="text">
     </div>
+    <div class="setup-field">
+      <label>API Read Token (Optional - Defaults to Command Token)</label>
+      <input id="f-api-token" placeholder="API specific token" type="text">
+    </div>
     <div class="setup-divider">Cloudflare R2 (Direct Read Access)</div>
     <div class="setup-field">
       <label>R2 Endpoint URL</label>
@@ -1135,11 +1140,12 @@ function updateSensorConfigFromDevice() {
   <div class="tab-bar">
     <button class="tab active" onclick="switchTab('status')">Status</button>
     <button class="tab" onclick="switchTab('sensors')">Sensors</button>
-    <button class="tab" onclick="switchTab('config')">Config</button>
+    <button class="tab" id="tab-analytics" onclick="switchTab('analytics')" style="display: none;">Analytics</button>
+    <button class="tab" id="tab-config" onclick="switchTab('config')">Config</button>
     <button class="tab" onclick="switchTab('events')">Events</button>
     <button class="tab" onclick="switchTab('log')">Log</button>
     <button class="tab" onclick="switchTab('r2logs')" id="tab-r2logs">R2 Logs</button>
-    <button class="tab" onclick="switchTab('admin')">Admin</button>
+    <button class="tab" id="tab-admin" onclick="switchTab('admin')">Admin</button>
     <button class="tab" onclick="switchTab('setup')">⚙ Credentials</button>
   </div>
 
@@ -1259,6 +1265,10 @@ function updateSensorConfigFromDevice() {
 
     <h2 style="font-size:16px;font-weight:800;margin-top:24px;margin-bottom:12px;">Remotes</h2>
     <div class="sensor-cards" id="remote-cards"></div>
+  </div>
+
+  <!-- ANALYTICS PANEL -->
+  <div class="panel" id="panel-analytics" style="flex-direction: column; padding: 20px; overflow-y: auto;">
   </div>
 
   <!-- R2 LOGS -->
@@ -1636,6 +1646,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   credentials = loadCreds();
+  checkTabVisibilities();
   if (credentials) {
     hideSetup();
     connect();
@@ -1685,6 +1696,7 @@ function populateSetupForm(c) {
   if (c.password)  document.getElementById('f-pass').value   = c.password;
   if (c.device_id) document.getElementById('f-device').value = c.device_id;
   if (c.cmd_token) document.getElementById('f-token').value  = c.cmd_token;
+  if (c.api_token) document.getElementById('f-api-token').value = c.api_token;
   if (c.r2_endpoint) document.getElementById('f-r2-endpoint').value = c.r2_endpoint;
   if (c.r2_access_key) document.getElementById('f-r2-access-key').value = c.r2_access_key;
   if (c.r2_secret_key) document.getElementById('f-r2-secret-key').value = c.r2_secret_key;
@@ -1700,6 +1712,7 @@ function setupConnect() {
   const password  = document.getElementById('f-pass').value;
   const device_id = document.getElementById('f-device').value.trim() || 'diewesemoer';
   const cmd_token = document.getElementById('f-token').value.trim();
+  const api_token = document.getElementById('f-api-token').value.trim();
   const r2_endpoint = document.getElementById('f-r2-endpoint').value.trim();
   const r2_access_key = document.getElementById('f-r2-access-key').value.trim();
   const r2_secret_key = document.getElementById('f-r2-secret-key').value.trim();
@@ -1708,8 +1721,9 @@ function setupConnect() {
   if (!broker) { showSetupError('Broker host is required.'); return; }
   if (!username || !password) { showSetupError('Username and password required.'); return; }
 
-  const c = { broker, port, proto, path, username, password, device_id, cmd_token, r2_endpoint, r2_access_key, r2_secret_key, r2_bucket };
+  const c = { broker, port, proto, path, username, password, device_id, cmd_token, api_token, r2_endpoint, r2_access_key, r2_secret_key, r2_bucket };
   saveCreds(c);
+  checkTabVisibilities();
   hideSetup();
   connect();
 }
@@ -1721,13 +1735,16 @@ function showSetupError(msg) {
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t) => {
-    const panels = ['status','sensors','config','events','log','r2logs','admin','setup'];
+    const panels = ['status','sensors','analytics','config','events','log','r2logs','admin','setup'];
     t.classList.toggle('active', t.id === 'tab-' + name || t.textContent.toLowerCase().includes(name) || (name === 'r2logs' && t.id === 'tab-r2logs'));
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if (name === 'setup') { showSetup(); return; }
   const p = document.getElementById('panel-' + name);
   if (p) p.classList.add('active');
+  if (name === 'analytics') {
+    switchTabToAnalytics();
+  }
   if (name === 'sensors') {
     buildSensorCards();
     buildRemoteCards();
@@ -4059,8 +4076,310 @@ function devToggleToolbar() {
   tb.style.opacity       = devToolbarVisible ? '1' : '0';
   tb.style.pointerEvents = devToolbarVisible ? '' : 'none';
 }
+
+// ─── TELEMETRY & ANALYTICS MODULE INTEGRATION ───
+let telemetryLoaded = false;
+let analyticsHours = 24;
+let chartVitalsInstance, chartStatesInstance, chartStorageInstance;
+
+function checkTabVisibilities() {
+  const creds = loadCreds();
+  
+  // Advanced administrative and observation tabs require explicit configurations
+  const hasApiToken = creds && creds.api_token && creds.api_token !== "";
+  const hasR2 = creds && creds.r2_endpoint && creds.r2_endpoint !== "" && creds.r2_access_key && creds.r2_access_key !== "";
+
+  // 1. Analytics tab visibility
+  const tabAnalytics = document.getElementById('tab-analytics');
+  if (tabAnalytics) {
+    tabAnalytics.style.display = (hasApiToken && creds.broker) ? '' : 'none';
+  }
+
+  // 2. Config tab visibility
+  const tabConfig = document.getElementById('tab-config');
+  if (tabConfig) {
+    tabConfig.style.display = hasApiToken ? '' : 'none';
+  }
+
+  // 3. Admin tab visibility
+  const tabAdmin = document.getElementById('tab-admin');
+  if (tabAdmin) {
+    tabAdmin.style.display = hasApiToken ? '' : 'none';
+  }
+
+  // 4. R2 Logs tab visibility
+  const tabR2Logs = document.getElementById('tab-r2logs');
+  if (tabR2Logs) {
+    tabR2Logs.style.display = hasR2 ? '' : 'none';
+  }
+
+  // Safety fallback: if an active tab becomes hidden on credentials removal, route user back to Status
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab && activeTab.style.display === 'none') {
+    switchTab('status');
+  }
+}
+
+async function switchTabToAnalytics() {
+  const panel = document.getElementById('panel-analytics');
+  if (!panel) return;
+
+  if (!telemetryLoaded) {
+    panel.innerHTML = '<div style="font-family: var(--mono); font-size: 11px; text-align: center; padding: 40px; color: var(--text-muted);">Loading Telemetry Module...</div>';
+    try {
+      const response = await fetch('telemetry.html');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const html = await response.text();
+      panel.innerHTML = html;
+      telemetryLoaded = true;
+    } catch (err) {
+      panel.innerHTML = `<div style="font-family: var(--mono); font-size: 11px; text-align: center; padding: 40px; color: var(--red);">Failed to load telemetry template: ${err.message}</div>`;
+      return;
+    }
+  }
+  fetchAnalyticsData();
+}
+
+function changeAnalyticsTimeframe(hours) {
+  analyticsHours = hours;
+  const buttons = document.querySelectorAll('.time-btn-analytics');
+  buttons.forEach(btn => {
+    btn.style.background = 'var(--bg2)';
+    btn.style.color = 'var(--text-muted)';
+  });
+  event.target.style.background = 'var(--pink)';
+  event.target.style.color = '#fff';
+  fetchAnalyticsData();
+}
+
+function formatAnalyticsXAxisLabel(timestamp, totalHours) {
+  const date = new Date(timestamp * 1000);
+  if (totalHours <= 1) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } else if (totalHours <= 24) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (totalHours <= 168) {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+}
+
+async function fetchAnalyticsData() {
+  if (!credentials) return;
+  
+  const brokerHost = credentials.broker;
+  const token = credentials.api_token || credentials.cmd_token;
+  const deviceId = credentials.device_id;
+  
+  const url = `https://${brokerHost}/api/v1/telemetry?device_id=${deviceId}&hours=${analyticsHours}`;
+  
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("API Token unauthorized.");
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+    
+    const data = await res.json();
+    renderAnalyticsCharts(data);
+  } catch (err) {
+    console.error("[Analytics Error] Fetch failed:", err);
+    sysLog(`Analytics Fetch Error: ${err.message}`);
+  }
+}
+
+function renderAnalyticsCharts(data) {
+  const telemetry = {
+    labels: [], dbm: [], ram: [], uptimeHours: [],
+    powerState: [], cellState: [], connectionState: [],
+    sdFree: [], events: []
+  };
+
+  const expectedInterval = (analyticsHours * 3600) / 250;
+
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    telemetry.labels.push(formatAnalyticsXAxisLabel(d.utc_ts, analyticsHours));
+
+    let dbmValue = null;
+    let isConnected = false;
+    if (d.csq !== null) {
+      dbmValue = (d.csq * 2) - 113;
+      isConnected = true;
+    }
+
+    telemetry.dbm.push(dbmValue);
+    telemetry.ram.push(isConnected ? (d.ram_free / 1024) : null);
+    telemetry.uptimeHours.push(d.uptime_sec / 3600);
+    telemetry.sdFree.push(d.sd_free_kb / 1024);
+
+    telemetry.powerState.push(d.on_mains ? 5 : 4);
+    telemetry.cellState.push(d.cell_active ? 3 : 2);
+    telemetry.connectionState.push(isConnected ? 1 : 0);
+
+    let isReboot = false;
+    if (i > 0 && d.uptime_sec < data[i-1].uptime_sec) isReboot = true;
+
+    let isMissed = false;
+    if (i > 0 && (d.utc_ts - data[i-1].utc_ts) > (expectedInterval * 1.5)) isMissed = true;
+
+    telemetry.events.push({ reboot: isReboot, missed: isMissed });
+  }
+
+  const style = getComputedStyle(document.documentElement);
+  const colorText = style.getPropertyValue('--text') || '#E8E6E0';
+  const colorTextMuted = style.getPropertyValue('--text-muted') || '#807E78';
+  const colorBorder = style.getPropertyValue('--border') || 'rgba(255,255,255,0.07)';
+  
+  const colorPrimary = '#3b82f6';
+  const colorSecondary = '#a855f7';
+  const colorDanger = '#f43f5e';
+  const colorWarning = '#f59e0b';
+  const colorSuccess = '#10b981';
+  const colorCellular = '#f97316';
+  const colorUptime = '#14b8a6';
+
+  const ctxVitals = document.getElementById('chartVitals').getContext('2d');
+  if (chartVitalsInstance) chartVitalsInstance.destroy();
+  chartVitalsInstance = new Chart(ctxVitals, {
+    type: 'line',
+    data: {
+      labels: telemetry.labels,
+      datasets: [
+        {
+          label: 'Signal (dBm)',
+          data: telemetry.dbm,
+          borderColor: colorPrimary,
+          borderWidth: 2,
+          spanGaps: false,
+          pointRadius: telemetry.events.map(e => e.reboot ? 8 : (e.missed ? 6 : 0)),
+          pointStyle: telemetry.events.map(e => e.reboot ? 'triangle' : 'rectRot'),
+          pointBackgroundColor: telemetry.events.map(e => e.reboot ? colorWarning : colorDanger),
+          pointBorderColor: '#fff',
+          yAxisID: 'y'
+        },
+        {
+          label: 'Free RAM (MB)',
+          data: telemetry.ram,
+          borderColor: colorSecondary,
+          borderWidth: 1.5,
+          spanGaps: false,
+          pointRadius: 0,
+          borderDash: [4, 4],
+          yAxisID: 'y1'
+        },
+        {
+          label: 'Uptime (Hours)',
+          data: telemetry.uptimeHours,
+          borderColor: colorUptime,
+          borderWidth: 2,
+          pointRadius: 0,
+          yAxisID: 'y2'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        y: { min: -115, max: -40, position: 'left', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { color: colorBorder } },
+        y1: { position: 'right', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { drawOnChartArea: false } },
+        y2: { position: 'right', ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+
+  const ctxStates = document.getElementById('chartStates').getContext('2d');
+  if (chartStatesInstance) chartStatesInstance.destroy();
+  chartStatesInstance = new Chart(ctxStates, {
+    type: 'line',
+    data: {
+      labels: telemetry.labels,
+      datasets: [
+        { label: 'Power State', data: telemetry.powerState, borderColor: colorSuccess, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 },
+        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 },
+        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: colorText, font: { family: 'Syne', weight: 'bold' } } } },
+      scales: {
+        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        y: {
+          min: -1, max: 6,
+          afterFit: function(scale) { scale.width = 180; },
+          grid: {
+            color: context => (context.tick.value >= 0 && context.tick.value <= 5) ? colorBorder : 'transparent',
+            lineWidth: 1.5
+          },
+          ticks: {
+            color: colorText,
+            font: { weight: 'bold', size: 10, family: 'DM Mono' },
+            stepSize: 1,
+            autoSkip: false,
+            callback: function(value) {
+              const labels = {
+                5: '⚡ Mains Connected',
+                4: '🔋 Battery Backup',
+                3: '📶 Cellular Connected',
+                2: '📴 Cellular Off/Standby',
+                1: '🌐 WiFi Connected',
+                0: '🚫 WiFi Disconnected'
+              };
+              return labels[value] !== undefined ? labels[value] : '';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const ctxStorage = document.getElementById('chartStorage').getContext('2d');
+  if (chartStorageInstance) chartStorageInstance.destroy();
+  const maxStorageVal = Math.max(...telemetry.sdFree);
+  chartStorageInstance = new Chart(ctxStorage, {
+    type: 'line',
+    data: {
+      labels: telemetry.labels,
+      datasets: [{
+        label: 'Available SD Storage (MB)',
+        data: telemetry.sdFree,
+        borderWidth: 3,
+        pointRadius: 0,
+        fill: false,
+        segment: {
+          borderColor: ctx => {
+            const val = ctx.p1.parsed.y;
+            if (val < 1024) return colorDanger;
+            if (val < 2048) return colorWarning;
+            return colorSuccess;
+          }
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: colorBorder }, ticks: { color: colorTextMuted, maxTicksLimit: 10, font: { family: 'DM Mono' } } },
+        y: { min: 0, max: Math.ceil(maxStorageVal * 1.05), ticks: { color: colorTextMuted, font: { family: 'DM Mono' } }, grid: { color: colorBorder } }
+      }
+    }
+  });
+}
 </script>
 <!-- ═══ DEV TEST TOOLBAR ═══ -->
+----
 <!--<div id="dev-toolbar">
   <span>dev</span>
   <button class="dev-btn" onclick="devSetState('DISARMED')">Disarmed</button>
