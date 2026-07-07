@@ -25,7 +25,7 @@
         <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
             <div>
                 <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">1. Signal Quality, RAM & System Uptime</h3>
-                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">Line gaps represent "Disconnected" periods. Events: Reboots (⟲) and Missed Check-ins (☎)</span>
+                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px;">Line gaps represent "Disconnected" / missed heartbeat periods. Events: Reboots (⟲)</span>
             </div>
             
             <!-- Styled Chart Legending -->
@@ -34,7 +34,6 @@
                 <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; border-top: 2px dashed #0d9488; display: inline-block;"></span> <span style="color: var(--text-dim);">Free RAM (MB)</span></div>
                 <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 2px; background: #88888e; display: inline-block;"></span> <span style="color: var(--text-dim);">Uptime (Hours)</span></div>
                 <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">⟲</span> <span style="color: var(--text-dim);">Hardware Reboot</span></div>
-                <div style="display: flex; align-items: center; gap: 6px;"><span style="color: var(--red); font-weight: bold;">☎</span> <span style="color: var(--text-dim);">Missed Heartbeat</span></div>
             </div>
         </div>
         <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartVitals"></canvas></div>
@@ -46,12 +45,21 @@
         <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartStates"></canvas></div>
     </div>
 
-    <!-- Chart 3: Storage Trend -->
-    <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
-            <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">3. Storage Availability Trend</h3>
-            <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted);">Warning Thresholds: <span style="color: var(--green); font-weight: bold;">>2 GB</span> | <span style="color: var(--amber); font-weight: bold;">1–2 GB Warning</span> | <span style="color: var(--red); font-weight: bold;">&lt;1 GB Critical</span></span>
+    <!-- Bottom Row Grid: Storage Availability & SSIDs -->
+    <div style="display: flex; flex-direction: row; gap: 24px; flex-wrap: wrap; width: 100%;">
+        <!-- Chart 3: Storage Trend -->
+        <div style="flex: 1.5; min-width: 320px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+                <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text);">3. Storage Availability Trend</h3>
+                <span style="font-family: var(--mono); font-size: 10px; color: var(--text-muted);">Warning Thresholds: <span style="color: var(--green); font-weight: bold;">>2 GB</span> | <span style="color: var(--amber); font-weight: bold;">1–2 GB Warning</span> | <span style="color: var(--red); font-weight: bold;">&lt;1 GB Critical</span></span>
+            </div>
+            <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartStorage"></canvas></div>
         </div>
-        <div style="position: relative; height: 260px; width: 100%;"><canvas id="chartStorage"></canvas></div>
+
+        <!-- Chart 4: Connected WiFi Networks (Doughnut Chart) -->
+        <div style="flex: 1; min-width: 300px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); display: flex; flex-direction: column;">
+            <h3 style="font-family: var(--sans); font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px;">4. Connected WiFi Networks (SSID Allocation)</h3>
+            <div style="position: relative; height: 260px; width: 100%; display: flex; align-items: center; justify-content: center;"><canvas id="chartSSIDs"></canvas></div>
+        </div>
     </div>
 </div>

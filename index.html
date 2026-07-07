@@ -4086,7 +4086,7 @@ function devToggleToolbar() {
 // ─── TELEMETRY & ANALYTICS MODULE INTEGRATION ───
 let telemetryLoaded = false;
 let analyticsHours = 24;
-let chartVitalsInstance, chartStatesInstance, chartStorageInstance;
+let chartVitalsInstance, chartStatesInstance, chartStorageInstance, chartSSIDsInstance;
 
 function checkTabVisibilities() {
   const creds = loadCreds();
@@ -4207,7 +4207,9 @@ function renderAnalyticsCharts(data) {
     sdFree: [], events: []
   };
 
-  const expectedInterval = (analyticsHours * 3600) / 250;
+  if (!data || data.length === 0) {
+    return;
+  }
 
   const isDark = document.documentElement.dataset.theme === 'dark';
   const colorText = isDark ? '#ffffff' : '#1a1916'; // Bright white in dark mode, near-black in light mode
@@ -4231,48 +4233,75 @@ function renderAnalyticsCharts(data) {
     return canvas;
   }
   const styleReboot = createTextPointStyle('⟲', colorRed);
-  const styleMissed = createTextPointStyle('☎', colorRed);
 
+  // 1. Determine standard sampling interval based on timeframe range
+  let expectedInterval = 300; // Default to 5 minutes
+  if (analyticsHours <= 1) {
+    expectedInterval = 15; // 15 seconds
+  } else if (analyticsHours <= 6) {
+    expectedInterval = 60; // 1 minute
+  } else if (analyticsHours <= 24) {
+    expectedInterval = 300; // 5 minutes
+  } else if (analyticsHours <= 72) {
+    expectedInterval = 900; // 15 minutes
+  } else if (analyticsHours <= 168) {
+    expectedInterval = 1800; // 30 minutes
+  } else {
+    expectedInterval = 7200; // 2 hours
+  }
+
+  // 2. Walk sequentially through raw telemetry data and insert proportional empty padding for gaps
   for (let i = 0; i < data.length; i++) {
     const d = data[i];
+
+    if (i > 0) {
+      const gap = d.utc_ts - data[i-1].utc_ts;
+      const numNulls = Math.floor(gap / expectedInterval) - 1;
+
+      if (numNulls > 0) {
+        // Upper bound safety ceiling to keep Chart.js rendering fast if there is an extremely massive gap
+        const actualNulls = Math.min(numNulls, 400);
+        for (let k = 1; k <= actualNulls; k++) {
+          const padTs = data[i-1].utc_ts + (k * expectedInterval);
+          telemetry.labels.push(formatAnalyticsXAxisLabel(padTs, analyticsHours));
+          telemetry.dbm.push(null);
+          telemetry.ram.push(null);
+          telemetry.uptimeHours.push(null);
+          telemetry.sdFree.push(null);
+          telemetry.powerState.push(null);
+          telemetry.cellState.push(null);
+          telemetry.connectionState.push(null);
+          telemetry.systemState.push(null);
+          telemetry.events.push({ reboot: false, missed: true });
+        }
+      }
+    }
+
+    // Plot the actual telemetry record - guarantees no data is ever collapsed or removed
     telemetry.labels.push(formatAnalyticsXAxisLabel(d.utc_ts, analyticsHours));
 
     let dbmValue = null;
-    let isConnected = false;
-    if (d.csq !== null) {
+    if (d.csq !== null && d.csq !== 99) {
       dbmValue = (d.csq * 2) - 113;
-      isConnected = true;
     }
 
     telemetry.dbm.push(dbmValue);
-    telemetry.ram.push(isConnected ? (d.ram_free / 1024) : null);
-    telemetry.uptimeHours.push(d.uptime_sec / 3600);
-    telemetry.sdFree.push(d.sd_free_kb / 1024);
+    telemetry.ram.push(d.ram_free !== null ? (d.ram_free / 1024) : null);
+    telemetry.uptimeHours.push(d.uptime_sec !== null ? (d.uptime_sec / 3600) : null);
+    telemetry.sdFree.push(d.sd_free_kb !== null ? (d.sd_free_kb / 1024) : null);
 
     telemetry.powerState.push(d.on_mains ? 5 : 4);
     const isCellActive = (d.csq !== null && d.csq > 0 && d.csq !== 99);
     telemetry.cellState.push(isCellActive ? 3 : 2);
 
-    let isReboot = false;
-    if (i > 0 && d.uptime_sec < data[i-1].uptime_sec) isReboot = true;
-
-    let isMissed = false;
-    if (i > 0) {
-      const gap = d.utc_ts - data[i-1].utc_ts;
-      // In Power Save, heartbeats are 30 min (1800s). In normal mode, they are 5 min (300s).
-      const wasPowerSave = (data[i-1].ssid === "disconnected" || data[i-1].ssid === "" || !data[i-1].on_mains);
-      const threshold = wasPowerSave ? 2200 : 500; // 36 mins vs 8.3 mins
-      if (gap > threshold) isMissed = true;
-    }
-
     // WiFi/Internet Connection State (Internet On [1] vs Internet Off [0])
     let isInternetOn = false;
-    if (!isMissed && d.ssid !== "disconnected" && d.ssid !== "Disconnected" && d.ssid !== "" && d.ssid !== null) {
+    if (d.ssid !== "disconnected" && d.ssid !== "Disconnected" && d.ssid !== "" && d.ssid !== null) {
       isInternetOn = true;
     }
     telemetry.connectionState.push(isInternetOn ? 1 : 0);
 
-    // System Security State mapping (DS, AW, HA, ED, AL, HW) to Y-axis levels -7 to -2
+    // System Security State mapping (DS, AW, HA, ED, AL, HW)
     let sysStateLevel = null;
     if (d.security_state) {
       const stateMap = {
@@ -4287,7 +4316,15 @@ function renderAnalyticsCharts(data) {
     }
     telemetry.systemState.push(sysStateLevel);
 
-    telemetry.events.push({ reboot: isReboot, missed: isMissed });
+    // Safe, jitter-filtered reboot check against true preceding record
+    let isReboot = false;
+    if (i > 0 && 
+        d.uptime_sec !== null && 
+        data[i-1].uptime_sec !== null && 
+        (data[i-1].uptime_sec - d.uptime_sec) > 15) {
+      isReboot = true;
+    }
+    telemetry.events.push({ reboot: isReboot, missed: false });
   }
 
   const colorPrimary = '#3b82f6';
@@ -4311,8 +4348,8 @@ function renderAnalyticsCharts(data) {
           borderColor: colorCellular, // Same orange as cellular backup
           borderWidth: 2,
           spanGaps: false,
-          pointRadius: telemetry.events.map(e => e.reboot || e.missed ? 20 : 0), // Double size
-          pointStyle: telemetry.events.map(e => e.reboot ? styleReboot : (e.missed ? styleMissed : 'circle')),
+          pointRadius: telemetry.events.map(e => e.reboot ? 20 : 0), // Double size
+          pointStyle: telemetry.events.map(e => e.reboot ? styleReboot : 'circle'),
           pointBackgroundColor: '#f43f5e', // Legend red
           pointBorderColor: '#fff',
           pointHitRadius: 20, // Invisible hover hitbox of 20px
@@ -4334,6 +4371,7 @@ function renderAnalyticsCharts(data) {
           data: telemetry.uptimeHours,
           borderColor: '#88888e', // Lighter neutral color visible in both modes
           borderWidth: 2,
+          spanGaps: false,
           pointRadius: 0,
           pointHitRadius: 20, // Invisible hover hitbox of 20px
           yAxisID: 'y2'
@@ -4380,9 +4418,9 @@ function renderAnalyticsCharts(data) {
     data: {
       labels: telemetry.labels,
       datasets: [
-        { label: 'Power State', data: telemetry.powerState, borderColor: '#047857', fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 }, // slightly Darker green
-        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 }, // Keep orange
-        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20 },
+        { label: 'Power State', data: telemetry.powerState, borderColor: '#047857', fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false }, // slightly Darker green
+        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false }, // Keep orange
+        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false },
         { label: 'Security State', data: telemetry.systemState, borderColor: '#e8638a', fill: false, stepped: true, borderWidth: 3, pointRadius: 0, pointHitRadius: 20, spanGaps: false } // Solid pink brand color
       ]
     },
@@ -4444,9 +4482,11 @@ function renderAnalyticsCharts(data) {
         pointRadius: 0,
         pointHitRadius: 20, // Invisible hover hitbox of 20px
         fill: false,
+        spanGaps: false,
         segment: {
           borderColor: ctx => {
             const val = ctx.p1.parsed.y;
+            if (val === null || isNaN(val)) return 'transparent'; // Handle segments near nulls cleanly
             if (val < 1024) return colorDanger;
             if (val < 2048) return colorWarning;
             return colorSuccess;
@@ -4466,6 +4506,65 @@ function renderAnalyticsCharts(data) {
           grid: { color: colorBorder, tickColor: colorBorder },
           border: { color: colorBorder },
           title: { display: true, text: 'Free Storage (MB)', color: colorText, font: { family: 'Syne', weight: 'bold', size: 10 } }
+        }
+      }
+    }
+  });
+
+  // Calculate SSID connection metrics for the selected historical period (never skips raw data points)
+  const ssidCounts = {};
+  data.forEach(d => {
+    let ssid = d.ssid;
+    if (ssid === null || ssid === undefined || String(ssid).trim() === "") {
+      ssid = "Offline / Disconnected";
+    } else if (String(ssid).toLowerCase() === "disconnected") {
+      ssid = "Offline / Disconnected";
+    }
+    ssidCounts[ssid] = (ssidCounts[ssid] || 0) + 1;
+  });
+
+  const ssidLabels = Object.keys(ssidCounts);
+  const ssidValues = Object.values(ssidCounts);
+
+  const ssidPalette = [
+    '#e8638a', // Brand Pink
+    '#3b82f6', // WiFi Blue
+    '#10b981', // Brand Teal/Green
+    '#f59e0b', // Amber
+    '#a855f7', // Purple
+    '#14b8a6', // Turquoise
+    '#ec4899', // Magenta
+    '#6366f1'  // Indigo
+  ];
+
+  const bgColors = ssidLabels.map((label, idx) => {
+    if (label.includes("Offline")) return '#64748b'; // Neutral slate grey representing offline periods
+    return ssidPalette[idx % ssidPalette.length];
+  });
+
+  const ctxSSIDs = document.getElementById('chartSSIDs').getContext('2d');
+  if (chartSSIDsInstance) chartSSIDsInstance.destroy();
+  chartSSIDsInstance = new Chart(ctxSSIDs, {
+    type: 'doughnut',
+    data: {
+      labels: ssidLabels,
+      datasets: [{
+        data: ssidValues,
+        backgroundColor: bgColors,
+        borderWidth: isDark ? 2 : 1,
+        borderColor: isDark ? '#111115' : '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            color: colorText,
+            font: { family: 'DM Mono', size: 10 }
+          }
         }
       }
     }
