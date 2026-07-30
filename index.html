@@ -4211,6 +4211,19 @@ function renderAnalyticsCharts(data) {
     return;
   }
 
+  // Helper to determine point radius, ensuring isolated points are visible
+  function getPointRadius(arr, defaultRadius = 0, isolatedRadius = 4) {
+    return arr.map((val, idx) => {
+      if (val === null || val === undefined) return 0;
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const next = idx < arr.length - 1 ? arr[idx + 1] : null;
+      if (prev === null && next === null) {
+        return isolatedRadius;
+      }
+      return defaultRadius;
+    });
+  }
+
   const isDark = document.documentElement.dataset.theme === 'dark';
   const colorText = isDark ? '#ffffff' : '#1a1916'; // Bright white in dark mode, near-black in light mode
   const colorTextMuted = isDark ? '#a3a3a3' : '#706e66';
@@ -4249,6 +4262,26 @@ function renderAnalyticsCharts(data) {
   } else {
     expectedInterval = 7200; // 2 hours
   }
+
+  // Pre-process raw data to duplicate isolated points.
+  // This forces Chart.js to naturally draw a clean, short horizontal segment rather than leaving it invisible.
+  const processedData = [];
+  const segmentWidth = expectedInterval * 0.3; // Segment spans 30% of standard interval
+
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    processedData.push(d);
+
+    const isIsolatedBefore = (i === 0) || (d.utc_ts - data[i - 1].utc_ts > expectedInterval * 1.5);
+    const isIsolatedAfter = (i === data.length - 1) || (data[i + 1].utc_ts - d.utc_ts > expectedInterval * 1.5);
+
+    if (isIsolatedBefore && isIsolatedAfter) {
+      const clone = Object.assign({}, d);
+      clone.utc_ts = d.utc_ts + segmentWidth;
+      processedData.push(clone);
+    }
+  }
+  data = processedData;
 
   // 2. Walk sequentially through raw telemetry data and insert proportional empty padding for gaps
   for (let i = 0; i < data.length; i++) {
@@ -4348,7 +4381,14 @@ function renderAnalyticsCharts(data) {
           borderColor: colorCellular, // Same orange as cellular backup
           borderWidth: 2,
           spanGaps: false,
-          pointRadius: telemetry.events.map(e => e.reboot ? 20 : 0), // Double size
+          pointRadius: telemetry.dbm.map((val, idx) => {
+            if (val === null || val === undefined) return 0;
+            if (telemetry.events[idx]?.reboot) return 20;
+            const prev = idx > 0 ? telemetry.dbm[idx - 1] : null;
+            const next = idx < telemetry.dbm.length - 1 ? telemetry.dbm[idx + 1] : null;
+            if (prev === null && next === null) return 4;
+            return 0;
+          }),
           pointStyle: telemetry.events.map(e => e.reboot ? styleReboot : 'circle'),
           pointBackgroundColor: '#f43f5e', // Legend red
           pointBorderColor: '#fff',
@@ -4361,7 +4401,7 @@ function renderAnalyticsCharts(data) {
           borderColor: '#0d9488', // Teal toward green
           borderWidth: 1.5,
           spanGaps: false,
-          pointRadius: 0,
+          pointRadius: getPointRadius(telemetry.ram, 0, 4),
           pointHitRadius: 20, // Invisible hover hitbox of 20px
           borderDash: [4, 4],
           yAxisID: 'y1'
@@ -4372,7 +4412,7 @@ function renderAnalyticsCharts(data) {
           borderColor: '#88888e', // Lighter neutral color visible in both modes
           borderWidth: 2,
           spanGaps: false,
-          pointRadius: 0,
+          pointRadius: getPointRadius(telemetry.uptimeHours, 0, 4),
           pointHitRadius: 20, // Invisible hover hitbox of 20px
           yAxisID: 'y2'
         }
@@ -4418,10 +4458,10 @@ function renderAnalyticsCharts(data) {
     data: {
       labels: telemetry.labels,
       datasets: [
-        { label: 'Power State', data: telemetry.powerState, borderColor: '#047857', fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false }, // slightly Darker green
-        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false }, // Keep orange
-        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: 0, pointHitRadius: 20, spanGaps: false },
-        { label: 'Security State', data: telemetry.systemState, borderColor: '#e8638a', fill: false, stepped: true, borderWidth: 3, pointRadius: 0, pointHitRadius: 20, spanGaps: false } // Solid pink brand color
+        { label: 'Power State', data: telemetry.powerState, borderColor: '#047857', fill: false, stepped: true, borderWidth: 2.5, pointRadius: getPointRadius(telemetry.powerState, 0, 4), pointHitRadius: 20, spanGaps: false }, // slightly Darker green
+        { label: 'Cellular Backup', data: telemetry.cellState, borderColor: colorCellular, fill: false, stepped: true, borderWidth: 2.5, pointRadius: getPointRadius(telemetry.cellState, 0, 4), pointHitRadius: 20, spanGaps: false }, // Keep orange
+        { label: 'WiFi Network', data: telemetry.connectionState, borderColor: colorPrimary, fill: false, stepped: true, borderWidth: 2.5, pointRadius: getPointRadius(telemetry.connectionState, 0, 4), pointHitRadius: 20, spanGaps: false },
+        { label: 'Security State', data: telemetry.systemState, borderColor: '#e8638a', fill: false, stepped: true, borderWidth: 3, pointRadius: getPointRadius(telemetry.systemState, 0, 4), pointHitRadius: 20, spanGaps: false } // Solid pink brand color
       ]
     },
     options: {
@@ -4479,7 +4519,7 @@ function renderAnalyticsCharts(data) {
         label: 'Available SD Storage (MB)',
         data: telemetry.sdFree,
         borderWidth: 3,
-        pointRadius: 0,
+        pointRadius: getPointRadius(telemetry.sdFree, 0, 4),
         pointHitRadius: 20, // Invisible hover hitbox of 20px
         fill: false,
         spanGaps: false,
